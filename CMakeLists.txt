@@ -25,6 +25,5 @@ endif()
 add_subdirectory(${ENGINE_DIR} max)
 
 # max-demo
-include_directories("${ENGINE_DIR}/include")
-add_executable(${PROJECT_NAME} src/main.cpp)
-target_link_libraries(${PROJECT_NAME} max)
+include(${ENGINE_DIR}/cmake/max/project.cmake)
+add_max_project(${PROJECT_NAME})
