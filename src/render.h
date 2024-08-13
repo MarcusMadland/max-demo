@@ -4,17 +4,14 @@
 
 struct RenderSettings
 {
-	RenderSettings()
-		: m_activeCameraIdx(0)
-		, m_width(1280)
-		, m_height(720)
-	{}
-
-	uint32_t m_activeCameraIdx;
-	uint16_t m_width;
-	uint16_t m_height;
+	uint32_t m_activeCameraIdx; //!< Current active camera that will be used for rendering.
+	uint16_t m_width;			//!< Current resolution.
+	uint16_t m_height;			//!< Current resolution.
 };
 
-/// For each renderable draw them to the screen using different rendering techniques.
-///
-void render(RenderSettings* _settings);
+void renderCreate(RenderSettings* _settings);
+
+void renderDestroy();
+
+void renderUpdate(RenderSettings* _settings);
+

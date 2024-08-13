@@ -41,7 +41,7 @@ public:
 		// Enable input.
 		m_input.enable();
 
-		// Default system settings.
+		// System settings.
 		m_cameraSettings.m_activeCameraIdx = kDefaultCameraIdx;
 		m_cameraSettings.m_width = m_width;
 		m_cameraSettings.m_height = m_height;
@@ -51,10 +51,18 @@ public:
 		m_renderSettings.m_activeCameraIdx = kDefaultCameraIdx;
 		m_renderSettings.m_width = m_width;
 		m_renderSettings.m_height = m_height;
+
+		// Systems.
+		cameraCreate(&m_cameraSettings);
+		renderCreate(&m_renderSettings);
 	}
 
 	virtual int shutdown() override
 	{
+		// Systems.
+		renderDestroy();
+		cameraDestroy();
+
 		// Disable input.
 		m_input.disable();
 
@@ -112,8 +120,8 @@ public:
 			}
 
 			// Game Systems.
-			camera(&m_cameraSettings);
-			render(&m_renderSettings);
+			cameraUpdate(&m_cameraSettings);
+			renderUpdate(&m_renderSettings);
 
 			return true;
 		}

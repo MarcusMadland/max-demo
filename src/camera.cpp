@@ -4,60 +4,93 @@
 
 #include "components.h"
 
-void camera(CameraSettings* _settings)
+struct CameraSystem
 {
-	max::System<CameraComponent> system;
-	system.each(10, [](max::EntityHandle _entity, void* _userData)
-		{
-			CameraSettings* settings = (CameraSettings*)_userData;
+	void create(CameraSettings* _settings)
+	{
 
-			// Update with active camera only.
-			CameraComponent* cc = max::getComponent<CameraComponent>(_entity);
-			if (cc->m_idx == settings->m_activeCameraIdx)
+	}
+
+	void update(CameraSettings* _settings)
+	{
+		max::System<CameraComponent> system;
+		system.each(10, [](max::EntityHandle _entity, void* _userData)
 			{
-				// Camera animation.
-				if (cc->m_numAnimations > 0)
-				{
-				}
-				// Camera from input.
-				else
-				{
-					// Orbit camera.
-					TransformComponent* tc = max::getComponent<TransformComponent>(_entity); 
-					if (tc != NULL)
-					{
-						bx::mtxLookAt(cc->m_view,
-							{ 0.0f, 5.0f, -8.0f },
-							{ 0.0f, 0.5f, 0.0f }
-						);
+				CameraSettings* settings = (CameraSettings*)_userData;
 
-						bx::mtxProj(cc->m_proj,
-							cc->m_fov,
-							(float)settings->m_width / (float)settings->m_height,
-							settings->m_near,
-							settings->m_far,
-							max::getCaps()->homogeneousDepth
-						);
+				// Update with active camera only.
+				CameraComponent* cc = max::getComponent<CameraComponent>(_entity);
+				if (cc->m_idx == settings->m_activeCameraIdx)
+				{
+					// Camera animation.
+					if (cc->m_numSplinePoints > 0)
+					{
 					}
-					// Fly camera.
+					// Camera from input.
 					else
 					{
-						bx::mtxLookAt(cc->m_view,
-							{ 0.0f, 5.0f, -8.0f },
-							{ 0.0f, 0.5f, 0.0f }
-						);
+						// Orbit camera.
+						TransformComponent* tc = max::getComponent<TransformComponent>(_entity);
+						if (tc != NULL)
+						{
+							bx::mtxLookAt(cc->m_view,
+								{ 0.0f, 5.0f, -8.0f },
+								{ 0.0f, 0.5f, 0.0f }
+							);
 
-						bx::mtxProj(cc->m_proj,
-							cc->m_fov,
-							(float)settings->m_width / (float)settings->m_height,
-							settings->m_near,
-							settings->m_far,
-							max::getCaps()->homogeneousDepth
-						);
+							bx::mtxProj(cc->m_proj,
+								cc->m_fov,
+								(float)settings->m_width / (float)settings->m_height,
+								settings->m_near,
+								settings->m_far,
+								max::getCaps()->homogeneousDepth
+							);
+						}
+						// Fly camera.
+						else
+						{
+							bx::mtxLookAt(cc->m_view,
+								{ 0.0f, 5.0f, -8.0f },
+								{ 0.0f, 0.5f, 0.0f }
+							);
+
+							bx::mtxProj(cc->m_proj,
+								cc->m_fov,
+								(float)settings->m_width / (float)settings->m_height,
+								settings->m_near,
+								settings->m_far,
+								max::getCaps()->homogeneousDepth
+							);
+						}
 					}
 				}
-			}
-			
-		}, _settings);
-	
+
+			}, _settings);
+	}
+
+	void destroy()
+	{
+
+	}
+};
+
+static CameraSystem* s_ctx = NULL;
+
+void cameraCreate(CameraSettings* _settings)
+{
+	s_ctx = BX_NEW(max::getAllocator(), CameraSystem);
+	s_ctx->create(_settings);
 }
+
+void cameraDestroy()
+{
+	s_ctx->destroy();
+	bx::deleteObject<CameraSystem>(max::getAllocator(), s_ctx);
+	s_ctx = NULL;
+}
+
+void cameraUpdate(CameraSettings* _settings)
+{
+	s_ctx->update(_settings);
+}
+

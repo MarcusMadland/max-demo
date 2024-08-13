@@ -4,13 +4,15 @@
 
 struct CameraSettings
 {
-	uint32_t m_activeCameraIdx;
-	uint16_t m_width;
-	uint16_t m_height;
-	float m_near;
-	float m_far;
+	uint32_t m_activeCameraIdx; //!< Current active camera that will be used for rendering.
+	uint16_t m_width;		    //!< Current resolution.
+	uint16_t m_height;		    //!< Current resolution.
+	float m_near;				//!< Near clip distance.
+	float m_far;				//!< Far clip distance.
 };
 
-/// For each camera calculate view and projection matrices.
-///
-void camera(CameraSettings* _settings);
+void cameraCreate(CameraSettings* _settings);
+
+void cameraDestroy();
+
+void cameraUpdate(CameraSettings* _settings);

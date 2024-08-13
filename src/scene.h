@@ -22,8 +22,8 @@ struct MayaBridge
 	bool end();
 	void update(std::unordered_map<std::string, EntityHandle>& _entities);
 
-	bool m_isSynced;
 	bx::SharedBuffer m_buffer;
+	bx::SharedBuffer m_readbuffer;
 	SharedData* m_shared;
 };
 
