@@ -1,6 +1,6 @@
 /*
  * Copyright 2011-2024 Branimir Karadzic. All rights reserved.
- * License: https://github.com/bkaradzic/bgfx/blob/master/LICENSE
+ * License: https://github.com/bkaradzic/max/blob/master/LICENSE
  */
 
 #ifndef __SHADERLIB_SH__
@@ -387,7 +387,7 @@ vec3 fixCubeLookup(vec3 _v, float _lod, float _topLevelCubeSize)
 
 vec2 texture2DBc5(sampler2D _sampler, vec2 _uv)
 {
-#if BGFX_SHADER_LANGUAGE_HLSL && BGFX_SHADER_LANGUAGE_HLSL <= 300
+#if MAX_SHADER_LANGUAGE_HLSL && MAX_SHADER_LANGUAGE_HLSL <= 300
 	return texture2D(_sampler, _uv).yx;
 #else
 	return texture2D(_sampler, _uv).xy;
@@ -415,11 +415,11 @@ mat3 cofactor(mat4 _m)
 
 float toClipSpaceDepth(float _depthTextureZ)
 {
-#if BGFX_SHADER_LANGUAGE_GLSL
+#if MAX_SHADER_LANGUAGE_GLSL
 	return _depthTextureZ * 2.0 - 1.0;
 #else
 	return _depthTextureZ;
-#endif // BGFX_SHADER_LANGUAGE_GLSL
+#endif // MAX_SHADER_LANGUAGE_GLSL
 }
 
 vec3 clipToWorld(mat4 _invViewProj, vec3 _clipPos)

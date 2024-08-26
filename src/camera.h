@@ -9,6 +9,8 @@ struct CameraSettings
 	uint16_t m_height;		    //!< Current resolution.
 	float m_near;				//!< Near clip distance.
 	float m_far;				//!< Far clip distance.
+	float m_moveSpeed;			//!< Move speed of camera.
+	float m_lookSpeed;		    //!< Look speed of camera.
 };
 
 void cameraCreate(CameraSettings* _settings);

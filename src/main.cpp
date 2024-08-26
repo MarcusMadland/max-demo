@@ -6,7 +6,8 @@
 #include "render.h"
 #include "camera.h"
 
-constexpr uint32_t kDefaultCameraIdx = 0;
+constexpr uint32_t kDebugCameraIdx = 0;
+constexpr uint32_t kDefaultCameraIdx = 1;
 
 class TwilightGuardian : public max::AppI
 {
@@ -24,7 +25,7 @@ public:
 
 		// Initialize engine.
 		max::Init init;
-		init.rendererType = max::RendererType::Count;
+		init.rendererType = max::RendererType::OpenGL;
 		init.physicsType = max::PhysicsType::Count;
 		init.vendorId = MAX_PCI_ID_NONE;
 		init.platformData.nwh  = max::getNativeWindowHandle({0});
@@ -47,6 +48,8 @@ public:
 		m_cameraSettings.m_height = m_height;
 		m_cameraSettings.m_near = 0.01f;
 		m_cameraSettings.m_far = 1000.0f;
+		m_cameraSettings.m_moveSpeed = 2.0f;
+		m_cameraSettings.m_lookSpeed = 100.0f;
 
 		m_renderSettings.m_activeCameraIdx = kDefaultCameraIdx;
 		m_renderSettings.m_width = m_width;
@@ -84,13 +87,16 @@ public:
 		{
 			// Set debug mode.
 			max::setDebug(m_debug);
-
 			// Debug drawing.  (@todo Put elsewhere?)
 			max::dbgTextClear();
 
 			max::dbgDrawBegin(0);
 			max::dbgDrawGrid(max::Axis::Y, { 0.0f, 0.0f, 0.0f });
+			//max::dbgDrawAxis(5.0f, 0.0f, 5.0f, 1.0f, max::Axis::Count, 0.01f);
 			max::dbgDrawEnd();
+
+			// Update input.
+			m_input.update();
 
 			// Update scene.
 			m_scene.update();
@@ -101,22 +107,28 @@ public:
 			m_renderSettings.m_width  = m_width;
 			m_renderSettings.m_height = m_height;
 
-			// Toggle maya bridge. (@todo Put elsewhere?)
+			// Some global input stuff (@todo Put this elsewhere?)
 			if (max::inputGetAsBool(0, Action::ToggleMayaBridge))
 			{
 				if (m_scene.m_mayaBridge == NULL)
 				{
+					m_scene.unload();
 					m_scene.beginMayaBridge();
-					m_cameraSettings.m_activeCameraIdx = UINT32_MAX;
-					m_renderSettings.m_activeCameraIdx = UINT32_MAX;
+					m_renderSettings.m_activeCameraIdx = kDebugCameraIdx;
 				}
 				else
 				{
-					m_scene.endMayaBridge();
-					m_cameraSettings.m_activeCameraIdx = kDefaultCameraIdx;
 					m_renderSettings.m_activeCameraIdx = kDefaultCameraIdx;
+					m_scene.endMayaBridge();
+					m_scene.unload();
+
+					m_scene.load();
 				}
-				
+			}
+
+			if (max::inputGetAsBool(0, Action::Quit))
+			{
+				max::destroyWindow({ 0 });
 			}
 
 			// Game Systems.
