@@ -85,7 +85,7 @@ void MayaBridge::update(std::unordered_map<std::string, EntityHandle>& _entities
 					if (rc != NULL)
 					{
 						const max::Memory* vertices = max::copy(meshEvent.m_vertices, layout.getSize(meshEvent.m_numVertices));
-						const max::Memory* indices = max::copy(meshEvent.m_indices, meshEvent.m_numIndices * sizeof(uint16_t));
+						const max::Memory* indices = max::copy(meshEvent.m_indices, meshEvent.m_numIndices * sizeof(uint32_t));
 
 						max::update(rc->m_mesh, vertices, indices);
 					}
@@ -105,7 +105,7 @@ void MayaBridge::update(std::unordered_map<std::string, EntityHandle>& _entities
 				max::addComponent<TransformComponent>(entity, max::createComponent<TransformComponent>(tc));
 
 				const max::Memory* vertices = max::makeRef(&meshEvent.m_vertices[0][0], layout.getSize(meshEvent.m_numVertices));
-				const max::Memory* indices = max::makeRef(&meshEvent.m_indices[0], meshEvent.m_numIndices * sizeof(uint16_t));
+				const max::Memory* indices = max::makeRef(&meshEvent.m_indices[0], meshEvent.m_numIndices * sizeof(uint32_t));
 
 				Material material;
 				material.m_color = MAX_INVALID_HANDLE;

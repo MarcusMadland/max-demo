@@ -9,7 +9,7 @@ void Scene::load()
 	if (deserialize("scenes/scene.bin") || true)
 	{
 		// Resources
-		max::DynamicMeshHandle mesh = max::loadDynamicMesh("meshes/orb.bin");
+		max::DynamicMeshHandle mesh = max::loadDynamicMesh("meshes/orb.bin", true);
 
 		Material material;
 		bx::strCopy(material.m_colorPath, 1024, "textures/fieldstone-rgba.dds");
@@ -168,7 +168,7 @@ bool Scene::serialize(const char* _filepath)
 				bx::write(&writer, &verticesSize, sizeof(uint32_t), &err);
 				bx::write(&writer, data.m_vertices, verticesSize, &err);
 
-				uint32_t indicesSize = data.m_numIndices * sizeof(uint16_t);
+				uint32_t indicesSize = data.m_numIndices * sizeof(uint32_t);
 				bx::write(&writer, &indicesSize, sizeof(uint32_t), &err);
 				bx::write(&writer, data.m_indices, indicesSize, &err);
 
