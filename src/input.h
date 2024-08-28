@@ -13,6 +13,8 @@ struct Action
 		LookRight,
 
 		ToggleMayaBridge,
+		PlayerCamera,
+		DebugPlayerCamera,
 		Quit,
 
 		Count

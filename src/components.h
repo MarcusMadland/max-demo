@@ -25,7 +25,7 @@ struct Material
 // @todo For optimzation have support for non dynamic mesh as the final runtime wont need dynamic meshes.
 struct RenderComponent
 {
-	max::DynamicMeshHandle m_mesh; 
+	max::MeshHandle m_mesh; 
 	Material m_material;
 };
 

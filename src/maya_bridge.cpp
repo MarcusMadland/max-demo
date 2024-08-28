@@ -35,7 +35,7 @@ bool MayaBridge::end()
 	return true;
 }
 
-void MayaBridge::update(std::unordered_map<std::string, EntityHandle>& _entities)
+void MayaBridge::update(std::unordered_map<std::string, EntityHandle>& _world, std::unordered_map<std::string, EntityHandle>& _entities)
 {
 	// Will always read this data. Maya writes this.
 	m_buffer.read(m_shared, sizeof(SharedData));
@@ -63,7 +63,7 @@ void MayaBridge::update(std::unordered_map<std::string, EntityHandle>& _entities
 				.add(max::Attrib::TexCoord0, 2, max::AttribType::Float)
 				.end();
 
-			max::EntityHandle& entity = _entities[meshEvent.m_name].m_handle;
+			max::EntityHandle& entity = _world[meshEvent.m_name].m_handle;
 			if (isValid(entity))
 			{
 				if (meshEvent.m_numVertices == 0 && meshEvent.m_numIndices == 0)
@@ -76,19 +76,19 @@ void MayaBridge::update(std::unordered_map<std::string, EntityHandle>& _entities
 					max::destroy(entity);
 					entity = MAX_INVALID_HANDLE;
 
-					_entities.erase(meshEvent.m_name);
+					_world.erase(meshEvent.m_name);
 				}
 				else
 				{
 					// Update entity.
-					RenderComponent* rc = max::getComponent<RenderComponent>(entity);
-					if (rc != NULL)
-					{
-						const max::Memory* vertices = max::copy(meshEvent.m_vertices, layout.getSize(meshEvent.m_numVertices));
-						const max::Memory* indices = max::copy(meshEvent.m_indices, meshEvent.m_numIndices * sizeof(uint32_t));
-
-						max::update(rc->m_mesh, vertices, indices);
-					}
+					//RenderComponent* rc = max::getComponent<RenderComponent>(entity);
+					//if (rc != NULL)
+					//{
+					//	const max::Memory* vertices = max::copy(meshEvent.m_vertices, layout.getSize(meshEvent.m_numVertices));
+					//	const max::Memory* indices = max::copy(meshEvent.m_indices, meshEvent.m_numIndices * sizeof(uint32_t));
+					//
+					//	max::update(rc->m_mesh, vertices, indices);
+					//}
 				}
 			}
 			else if (meshEvent.m_numVertices != 0 && meshEvent.m_numIndices != 0)
@@ -104,8 +104,9 @@ void MayaBridge::update(std::unordered_map<std::string, EntityHandle>& _entities
 				};
 				max::addComponent<TransformComponent>(entity, max::createComponent<TransformComponent>(tc));
 
-				const max::Memory* vertices = max::makeRef(&meshEvent.m_vertices[0][0], layout.getSize(meshEvent.m_numVertices));
-				const max::Memory* indices = max::makeRef(&meshEvent.m_indices[0], meshEvent.m_numIndices * sizeof(uint32_t));
+				// @todo MakeRef or Copy?
+				const max::Memory* vertices = max::copy(&meshEvent.m_vertices[0][0], layout.getSize(meshEvent.m_numVertices));
+				const max::Memory* indices = max::copy(&meshEvent.m_indices[0], meshEvent.m_numIndices * sizeof(uint32_t));
 
 				Material material;
 				material.m_color = MAX_INVALID_HANDLE;
@@ -114,7 +115,7 @@ void MayaBridge::update(std::unordered_map<std::string, EntityHandle>& _entities
 				bx::strCopy(material.m_normalPath, 1024, "");
 
 				RenderComponent drc = {
-					max::createDynamicMesh(vertices, indices, layout), material,
+					max::createMesh(vertices, indices, layout), material,
 				};
 				max::addComponent<RenderComponent>(entity, max::createComponent<RenderComponent>(drc));
 			}
@@ -124,9 +125,9 @@ void MayaBridge::update(std::unordered_map<std::string, EntityHandle>& _entities
 		SharedData::TransformEvent transformEvent = m_shared->m_transformChanged;
 		if (transformEvent.m_changed)
 		{
-			if (!(_entities.find(transformEvent.m_name) == _entities.end()))
+			if (!(_world.find(transformEvent.m_name) == _world.end()))
 			{
-				max::EntityHandle& entity = _entities[transformEvent.m_name].m_handle;
+				max::EntityHandle& entity = _world[transformEvent.m_name].m_handle;
 				if (isValid(entity))
 				{
 					// Update entity.
@@ -158,9 +159,9 @@ void MayaBridge::update(std::unordered_map<std::string, EntityHandle>& _entities
 		SharedData::MaterialEvent materialEvent = m_shared->m_materialChanged;
 		if (materialEvent.m_changed)
 		{
-			if (!(_entities.find(materialEvent.m_name) == _entities.end()))
+			if (!(_world.find(materialEvent.m_name) == _world.end()))
 			{
-				max::EntityHandle& entity = _entities[materialEvent.m_name].m_handle;
+				max::EntityHandle& entity = _world[materialEvent.m_name].m_handle;
 				if (isValid(entity))
 				{
 					// Update entity.

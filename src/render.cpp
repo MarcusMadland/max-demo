@@ -153,7 +153,7 @@ struct GBuffer
 				RenderComponent* rc = max::getComponent<RenderComponent>(_entity);
 				if (rc != NULL)
 				{
-					max::DynamicMeshQuery* query = max::queryDynamicMesh(rc->m_mesh);
+					max::MeshQuery* query = max::queryMesh(rc->m_mesh);
 					for (uint32_t ii = 0; ii < query->m_num; ++ii)
 					{
 						float mtx[16];

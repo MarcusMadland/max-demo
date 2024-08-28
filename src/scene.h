@@ -12,16 +12,23 @@ struct Scene
 		: m_mayaBridge(NULL)
 	{}
 
-	void load();
-	void unload();
-	void update();
-
 	void beginMayaBridge();
 	void endMayaBridge();
 
-	bool serialize(const char* _filepath);
-	bool deserialize(const char* _filepath);
+	void update();
+	void unload(std::unordered_map<std::string, EntityHandle>& _entities);
+
+	// Entities
+	void loadEntities();
+	void unloadEntities();
+
+	// World
+	bool serializeWorld(const char* _filepath);
+	bool deserializeWorld(const char* _filepath);
+	void unloadWorld();
 	
 	MayaBridge* m_mayaBridge;
-	std::unordered_map<std::string, EntityHandle> m_entities;
+
+	std::unordered_map<std::string, EntityHandle> m_world;
+	std::unordered_map<std::string, EntityHandle> m_entitiess;
 };

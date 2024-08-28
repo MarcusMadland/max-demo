@@ -97,13 +97,26 @@ Input::Input()
 
 	m_mapping[Action::ToggleMayaBridge] = { Action::ToggleMayaBridge, [](const void* _userData)
 		{
-			const bool gp = max::inputGetKeyState(max::Key::GamepadGuide);
-			max::inputSetKeyState(max::Key::GamepadGuide, NULL, false);
-
 			const bool kb = max::inputGetKeyState(max::Key::F1);
 			max::inputSetKeyState(max::Key::F1, NULL, false);
 
-			return gp ? 1.0f : kb ? 1.0f : 0.0f;
+			return kb ? 1.0f : 0.0f;
+		} };
+
+	m_mapping[Action::PlayerCamera] = { Action::PlayerCamera, [](const void* _userData)
+		{
+			const bool kb = max::inputGetKeyState(max::Key::Key1);
+			max::inputSetKeyState(max::Key::Key1, NULL, false);
+
+			return kb ? 1.0f : 0.0f;
+		} };
+
+	m_mapping[Action::DebugPlayerCamera] = { Action::DebugPlayerCamera, [](const void* _userData)
+		{
+			const bool kb = max::inputGetKeyState(max::Key::Key2);
+			max::inputSetKeyState(max::Key::Key2, NULL, false);
+
+			return kb ? 1.0f : 0.0f;
 		} };
 
 	m_mapping[Action::Quit] = { Action::Quit, [](const void* _userData)

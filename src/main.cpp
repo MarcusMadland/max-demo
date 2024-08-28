@@ -9,6 +9,8 @@
 constexpr uint32_t kDebugCameraIdx = 0;
 constexpr uint32_t kDefaultCameraIdx = 1;
 
+constexpr const char* kDefaultScene = "scenes/scene.bin";
+
 class TwilightGuardian : public max::AppI
 {
 public:
@@ -37,7 +39,8 @@ public:
 		max::init(init);
 
 		// Load scene.
-		m_scene.load();
+		m_scene.deserializeWorld(kDefaultScene);
+		m_scene.loadEntities();
 
 		// Enable input.
 		m_input.enable();
@@ -70,7 +73,8 @@ public:
 		m_input.disable();
 
 		// Unload scene.
-		m_scene.unload();
+		m_scene.unloadEntities();
+		m_scene.unloadWorld();
 
 		// Shutdown engine.
 		max::shutdown();
@@ -112,18 +116,34 @@ public:
 			{
 				if (m_scene.m_mayaBridge == NULL)
 				{
-					m_scene.unload();
-					m_scene.beginMayaBridge();
-					m_renderSettings.m_activeCameraIdx = kDebugCameraIdx;
+					// Unload current world.
+					m_scene.unloadWorld();	   
+
+					// Begin maya (this will load world from maya)
+					m_scene.beginMayaBridge(); 
 				}
 				else
 				{
-					m_renderSettings.m_activeCameraIdx = kDefaultCameraIdx;
-					m_scene.endMayaBridge();
-					m_scene.unload();
+					// Save world on disk.
+					m_scene.serializeWorld(kDefaultScene); 
 
-					m_scene.load();
+					// End maya and unload world.
+					m_scene.endMayaBridge();	
+					m_scene.unloadWorld();
+					
+					// Load world from disk.
+					m_scene.deserializeWorld(kDefaultScene);
 				}
+			}
+
+			if (max::inputGetAsBool(0, Action::PlayerCamera))
+			{
+				m_renderSettings.m_activeCameraIdx = kDefaultCameraIdx;
+			}
+
+			if (max::inputGetAsBool(0, Action::DebugPlayerCamera))
+			{
+				m_renderSettings.m_activeCameraIdx = kDebugCameraIdx;
 			}
 
 			if (max::inputGetAsBool(0, Action::Quit))
