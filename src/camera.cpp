@@ -17,10 +17,8 @@ struct CameraSystem
 
 	}
 
-	void update(CameraSettings* _settings)
+	void update()
 	{
-		m_settings = _settings;
-
 		max::System<CameraComponent> system;
 		system.each(10, [](max::EntityHandle _entity, void* _userData)
 			{
@@ -49,9 +47,11 @@ struct CameraSystem
 								bx::Handedness::Right
 							);
 
+							cc->m_aspect = (float)settings->m_viewport.m_width / (float)settings->m_viewport.m_height;
+
 							bx::mtxProj(cc->m_proj,
 								cc->m_fov,
-								(float)settings->m_width / (float)settings->m_height,
+								cc->m_aspect,
 								settings->m_near,
 								settings->m_far,
 								max::getCaps()->homogeneousDepth,
@@ -88,9 +88,11 @@ struct CameraSystem
 								{0.0f, 1.0f, 0.0f},
 								bx::Handedness::Right);
 
+							cc->m_aspect = (float)settings->m_viewport.m_width / (float)settings->m_viewport.m_height;
+
 							bx::mtxProj(cc->m_proj,
 								cc->m_fov,
-								(float)settings->m_width / (float)settings->m_height,
+								cc->m_aspect,
 								settings->m_near,
 								settings->m_far, 
 								max::getCaps()->homogeneousDepth,
@@ -134,8 +136,8 @@ void cameraDestroy()
 	s_ctx = NULL;
 }
 
-void cameraUpdate(CameraSettings* _settings)
+void cameraUpdate()
 {
-	s_ctx->update(_settings);
+	s_ctx->update();
 }
 

@@ -1,0 +1,21 @@
+uniform vec4 u_perframe[9];
+#define u_invViewProj0     u_perframe[0]
+#define u_invViewProj1     u_perframe[1]
+#define u_invViewProj2     u_perframe[2]
+#define u_invViewProj3     u_perframe[3]
+#define u_lightDir         u_perframe[4].xyz
+#define u_unused10         u_perframe[4].w
+#define u_lightCol         u_perframe[5].xyz
+#define u_unused11         u_perframe[5].w
+#define u_volumeMin        u_perframe[6].xyz
+#define u_unused12         u_perframe[6].w
+#define u_volumeMax        u_perframe[7].xyz
+#define u_unused13         u_perframe[7].w
+#define u_volumeSize       u_perframe[8].xyz
+#define u_unused14         u_perframe[8].w
+
+uniform vec4 u_perdraw[2];
+#define u_texDiffuseFactor   u_perdraw[0].xyz
+#define u_texRoughnessFactor u_perdraw[0].w
+#define u_texNormalFactor    u_perdraw[1].xyz
+#define u_texMetallicFactor  u_perdraw[1].w

@@ -1,15 +1,67 @@
 #include <max/max.h>
 
-#include "scene.h"
+#include "imgui/imgui.h"
+#include "world.h"
+#include "entities.h"
 #include "input.h"
 #include "components.h"
 #include "render.h"
 #include "camera.h"
 
-constexpr uint32_t kDebugCameraIdx = 0;
-constexpr uint32_t kDefaultCameraIdx = 1;
+#ifndef TG_CONFIG_WITH_EDITOR_TOOLS
+#	define TG_CONFIG_WITH_EDITOR_TOOLS 1
+#endif // TG_CONFIG_WITH_EDITOR_TOOLS
 
-constexpr const char* kDefaultScene = "scenes/scene.bin";
+constexpr uint32_t kDefaultWindow = 0;
+
+struct Resolution 
+{
+	const char* m_label;
+	int m_width;
+	int m_height;
+};
+
+static Resolution s_resolutions[] = 
+{
+	{ "1920x1080", 1920, 1080 },
+	{ "1280x720", 1280, 720 },
+	{ "720x480", 720, 480 },
+	{ "480x360", 480, 360 },
+};
+
+static Resolution s_shadowmap[] =
+{
+	{ "4096x4096", 4096, 4096 },
+	{ "2048x2048", 2048, 2048 },
+	{ "1024x1024", 1024, 1024 },
+	{ "512x512", 512, 512 },
+};
+
+struct DebugBuffer
+{
+	const char* m_label;
+	RenderSettings::DebugBuffer m_enum;
+};
+
+static DebugBuffer s_debugbuffers[] =
+{
+	{ "None", RenderSettings::DebugBuffer::None },
+	{ "Diffuse", RenderSettings::DebugBuffer::Diffuse },
+	{ "Normal", RenderSettings::DebugBuffer::Normal },
+	{ "Surface", RenderSettings::DebugBuffer::Surface },
+	{ "Depth", RenderSettings::DebugBuffer::Depth },
+	{ "Irradiance", RenderSettings::DebugBuffer::Irradiance },
+	{ "Specular", RenderSettings::DebugBuffer::Specular },
+};
+
+struct EngineSettings
+{
+	bool m_vsync;
+
+	bool m_debugGrid;
+	bool m_debugText;
+	bool m_debugStats;
+};
 
 class TwilightGuardian : public max::AppI
 {
@@ -20,10 +72,12 @@ public:
 
 	void init(int32_t _argc, const char* const* _argv, uint32_t _width, uint32_t _height) override
 	{
+		m_mayaBridge = NULL;
+
 		m_width  = _width;
 		m_height = _height;
-		m_debug  = MAX_DEBUG_TEXT;
-		m_reset  = MAX_RESET_VSYNC;
+		m_debug  = MAX_DEBUG_NONE;
+		m_reset  = MAX_RESET_NONE;
 
 		// Initialize engine.
 		max::Init init;
@@ -38,25 +92,46 @@ public:
 		init.resolution.reset  = m_reset;
 		max::init(init);
 
+#if TG_CONFIG_WITH_EDITOR_TOOLS
+		// ImGui
+		imguiCreate();
+#endif
+		
 		// Load scene.
-		m_scene.deserializeWorld(kDefaultScene);
-		m_scene.loadEntities();
+		m_world.load("scenes/scene.bin");
+		m_entities.load();
 
 		// Enable input.
 		m_input.enable();
 
-		// System settings.
-		m_cameraSettings.m_activeCameraIdx = kDefaultCameraIdx;
-		m_cameraSettings.m_width = m_width;
-		m_cameraSettings.m_height = m_height;
+		// System settings. @todo Let's have a '.config' file for this that can be modified through settings menu.
+		CameraComponent* cc = max::getComponent<CameraComponent>(m_entities.m_entities["Player"].m_handle);
+
+		m_engineSettings.m_debugText = false;
+		m_engineSettings.m_debugStats = false;
+		m_engineSettings.m_debugGrid = false;
+
+		m_cameraSettings.m_activeCameraIdx = cc->m_idx;
+		m_cameraSettings.m_viewport.m_width = m_width;
+		m_cameraSettings.m_viewport.m_height = m_height;
 		m_cameraSettings.m_near = 0.01f;
 		m_cameraSettings.m_far = 1000.0f;
 		m_cameraSettings.m_moveSpeed = 2.0f;
 		m_cameraSettings.m_lookSpeed = 100.0f;
 
-		m_renderSettings.m_activeCameraIdx = kDefaultCameraIdx;
-		m_renderSettings.m_width = m_width;
-		m_renderSettings.m_height = m_height;
+		m_renderSettings.m_activeCameraIdx = cc->m_idx;
+		m_renderSettings.m_resolution.m_height = s_resolutions[0].m_width;
+		m_renderSettings.m_resolution.m_width = s_resolutions[0].m_height;
+		m_renderSettings.m_viewport.m_height = m_width;
+		m_renderSettings.m_viewport.m_height = m_height;
+		m_renderSettings.m_skybox = "textures/bolonga_lod.dds";
+		m_renderSettings.m_radiance = "textures/bolonga_lod.dds";
+		m_renderSettings.m_irradiance = "textures/bolonga_irr.dds";
+		m_renderSettings.m_debugbuffer = RenderSettings::None;
+		m_renderSettings.m_sunDir = { 0.0f, -1.0f, 0.0f };
+		m_renderSettings.m_sunCol = { 1.0f, 1.0f, 1.0f };
+		m_renderSettings.m_shadowMap.m_width = 1024;
+		m_renderSettings.m_shadowMap.m_height = 1024;
 
 		// Systems.
 		cameraCreate(&m_cameraSettings);
@@ -73,8 +148,13 @@ public:
 		m_input.disable();
 
 		// Unload scene.
-		m_scene.unloadEntities();
-		m_scene.unloadWorld();
+		m_world.unload();
+		m_entities.unload();
+
+#if TG_CONFIG_WITH_EDITOR_TOOLS
+		// ImGui
+		imguiDestroy();
+#endif
 
 		// Shutdown engine.
 		max::shutdown();
@@ -84,76 +164,244 @@ public:
 
 	bool update() override
 	{
-		max::MouseState mouseState;
-
 		// Process events.
-		if (!max::processEvents(m_width, m_height, m_debug, m_reset, &mouseState) )
+		if (!max::processEvents(m_width, m_height, m_debug, m_reset, &m_input.m_mouseState) )
 		{
+#if TG_CONFIG_WITH_EDITOR_TOOLS
+			// Imgui.
+			imguiBeginFrame(m_input.m_mouseState.m_mx
+				, m_input.m_mouseState.m_my
+				, (m_input.m_mouseState.m_buttons[max::MouseButton::Left] ? IMGUI_MBUT_LEFT : 0)
+				| (m_input.m_mouseState.m_buttons[max::MouseButton::Right] ? IMGUI_MBUT_RIGHT : 0)
+				| (m_input.m_mouseState.m_buttons[max::MouseButton::Middle] ? IMGUI_MBUT_MIDDLE : 0)
+				, m_input.m_mouseState.m_mz
+				, uint16_t(m_width)
+				, uint16_t(m_height)
+			);
+
+			ImGui::SetNextWindowPos(ImVec2(10, 10));
+			ImGui::SetNextWindowSizeConstraints({ 200, 100 }, { 1920, 1920 });
+			ImGui::SetNextWindowCollapsed(true, ImGuiCond_Appearing);
+			if (ImGui::Begin("MAX Engine | Dev Menu", NULL, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoMove))
+			{
+				if (ImGui::CollapsingHeader("Engine Settings", ImGuiTreeNodeFlags_DefaultOpen))
+				{
+					ImGui::Checkbox("VSync", &m_engineSettings.m_vsync);
+
+					uint32_t reset = m_reset;
+					m_reset = (m_engineSettings.m_vsync ? (m_reset | MAX_RESET_VSYNC) : (m_reset & ~MAX_RESET_VSYNC));
+					if (m_reset != reset)
+					{
+						max::reset(m_width, m_height, m_reset);
+					}
+
+					ImGui::Checkbox("Debug Text", &m_engineSettings.m_debugText);
+					ImGui::Checkbox("Debug Grid", &m_engineSettings.m_debugGrid);
+					ImGui::Checkbox("Debug Stats", &m_engineSettings.m_debugStats);
+
+					m_debug = (m_engineSettings.m_debugText ? (m_debug | MAX_DEBUG_TEXT) : (m_debug & ~MAX_DEBUG_TEXT));
+					m_debug = (m_engineSettings.m_debugStats ? (m_debug | MAX_DEBUG_STATS) : (m_debug & ~MAX_DEBUG_STATS));
+				}
+
+				if (ImGui::CollapsingHeader("Render Settings", ImGuiTreeNodeFlags_DefaultOpen))
+				{
+					ImGui::SliderInt("Active Render Camera", (int*)&m_renderSettings.m_activeCameraIdx, 0, 1);
+
+					static int currentResolutionIndex = 0;
+					if (ImGui::BeginCombo("Display Resolution", s_resolutions[currentResolutionIndex].m_label)) 
+					{
+						for (int i = 0; i < IM_ARRAYSIZE(s_resolutions); i++)
+						{
+							bool isSelected = (currentResolutionIndex == i);
+							if (ImGui::Selectable(s_resolutions[i].m_label, isSelected))
+							{
+								currentResolutionIndex = i;
+
+								m_renderSettings.m_resolution.m_width = s_resolutions[i].m_width;
+								m_renderSettings.m_resolution.m_height = s_resolutions[i].m_height;
+
+								renderReset();
+							}
+							if (isSelected) 
+							{
+								ImGui::SetItemDefaultFocus(); 
+							}
+						}
+						ImGui::EndCombo();
+					}
+
+					//static float s_sunAzimuth = 140.0f;
+					//static float s_sunElevation = 70.0f;
+					//ImGui::SliderFloat("Sun Azimuth", &s_sunAzimuth, 0.0f, 360.0f);
+					//ImGui::SliderFloat("Sun Elevation", &s_sunElevation, 0.0f, 90.0f);
+					//
+					//const double azimuth = bx::toRad(s_sunAzimuth);
+					//const double elevation = bx::toRad(s_sunElevation);
+					//m_renderSettings.m_sunDir.x = cos(azimuth) * cos(elevation);
+					//m_renderSettings.m_sunDir.y = sin(azimuth) * cos(elevation);
+					//m_renderSettings.m_sunDir.z = sin(elevation);
+
+					ImGui::SliderFloat3("Sun Dir", &m_renderSettings.m_sunDir.x, -1.0f, 1.0f);
+
+					ImGui::SliderFloat3("Sun Color", &m_renderSettings.m_sunCol.x, 0.0f, 1.0f);
+
+					static int currentShadowmapIndex = 0;
+					if (ImGui::BeginCombo("Shadow Resolution", s_shadowmap[currentShadowmapIndex].m_label))
+					{
+						for (int i = 0; i < IM_ARRAYSIZE(s_shadowmap); i++)
+						{
+							bool isSelected = (currentShadowmapIndex == i);
+							if (ImGui::Selectable(s_shadowmap[i].m_label, isSelected))
+							{
+								currentShadowmapIndex = i;
+
+								m_renderSettings.m_shadowMap.m_width = s_shadowmap[i].m_width;
+								m_renderSettings.m_shadowMap.m_height = s_shadowmap[i].m_height;
+
+								renderReset();
+							}
+							if (isSelected)
+							{
+								ImGui::SetItemDefaultFocus();
+							}
+						}
+						ImGui::EndCombo();
+					}
+
+					static int currentDebugbufferIndex = 0;
+					if (ImGui::BeginCombo("Debug Buffer", s_debugbuffers[currentDebugbufferIndex].m_label))
+					{
+						for (int i = 0; i < IM_ARRAYSIZE(s_debugbuffers); i++)
+						{
+							bool isSelected = (currentDebugbufferIndex == i);
+							if (ImGui::Selectable(s_debugbuffers[i].m_label, isSelected))
+							{
+								currentDebugbufferIndex = i;
+
+								m_renderSettings.m_debugbuffer = s_debugbuffers[i].m_enum;
+							}
+							if (isSelected)
+							{
+								ImGui::SetItemDefaultFocus();
+							}
+						}
+						ImGui::EndCombo();
+					}
+				}
+
+				if (ImGui::CollapsingHeader("Camera Settings", ImGuiTreeNodeFlags_DefaultOpen))
+				{
+					ImGui::SliderInt("Active Camera", (int*)&m_cameraSettings.m_activeCameraIdx, 0, 1);
+					ImGui::SliderFloat("Near", &m_cameraSettings.m_near, 0.0f, 1.0f);
+					ImGui::SliderFloat("Far", &m_cameraSettings.m_far, 1.0f, 10000.0f);
+					ImGui::SliderFloat("Sensitivity", &m_cameraSettings.m_lookSpeed, 0.1f, 200.0f);
+					ImGui::SliderFloat("Speed", &m_cameraSettings.m_moveSpeed, 0.1f, 50.0f);
+				}
+
+				if (ImGui::CollapsingHeader("Other", ImGuiTreeNodeFlags_DefaultOpen))
+				{
+					static bool s_connectToMaya;
+					if (ImGui::Checkbox("Edit in Autodesk Maya", &s_connectToMaya))
+					{
+						if (s_connectToMaya && m_mayaBridge == NULL)
+						{
+							// Unload current world and begin syncing with Maya.
+							m_world.unload();
+
+							m_mayaBridge = BX_NEW(max::getAllocator(), MayaBridge);
+							BX_ASSERT(m_mayaBridge->begin(), "Failed to begin maya bridge, not enough memory.")
+						}
+						else if (m_mayaBridge != NULL)
+						{
+							// Save current world and end syncing with Maya. 
+							m_world.serialize();
+
+							BX_ASSERT(m_mayaBridge->end(), "Failed to end maya bridge.")
+								bx::deleteObject(max::getAllocator(), m_mayaBridge);
+							m_mayaBridge = NULL;
+
+							m_world.unload();
+
+							// Load serialized scene from disk.
+							m_world.deserialize();
+						}
+					}
+				}
+			}
+			ImGui::End();
+
+			imguiEndFrame();
+
 			// Set debug mode.
 			max::setDebug(m_debug);
-			// Debug drawing.  (@todo Put elsewhere?)
 			max::dbgTextClear();
+			if (m_engineSettings.m_debugGrid)
+			{
+				max::dbgDrawBegin(1); // Draw in gbuffer view.
+				max::dbgDrawGrid(max::Axis::Y, { 0.0f, 0.0f, 0.0f });
+				max::dbgDrawEnd();
+			}
 
-			max::dbgDrawBegin(0);
-			max::dbgDrawGrid(max::Axis::Y, { 0.0f, 0.0f, 0.0f });
-			//max::dbgDrawAxis(5.0f, 0.0f, 5.0f, 1.0f, max::Axis::Count, 0.01f);
-			max::dbgDrawEnd();
+			if (true)
+			{
+				uint32_t idx = 1;
+
+				max::dbgTextPrintf(0, ++idx, 0xf, "World:");
+				for (auto it = m_world.m_entities.begin(); it != m_world.m_entities.end(); ++it)
+				{
+					max::dbgTextPrintf(0, ++idx, 0xf, "[%u]: %s", idx, it->first.c_str());
+				}
+
+				++idx;
+
+				max::dbgTextPrintf(0, ++idx, 0xf, "Entities:");
+				for (auto it = m_entities.m_entities.begin(); it != m_entities.m_entities.end(); ++it)
+				{
+					max::dbgTextPrintf(0, ++idx, 0xf, "[%u]: %s", idx, it->first.c_str());
+				}
+			}
+
+			// Update maya bridge.
+			if (m_mayaBridge != NULL)
+			{
+				m_mayaBridge->read(&m_world, &m_entities);
+
+				max::dbgTextPrintf(0, 0, 0xf, "Connected to maya...");
+			}
+#endif
+
+			// Resize.
+			if (m_width != m_renderSettings.m_viewport.m_width ||
+				m_height != m_renderSettings.m_viewport.m_height)
+			{
+				m_renderSettings.m_viewport.m_width = m_width;
+				m_renderSettings.m_viewport.m_height = m_height;
+				renderReset();
+
+				m_cameraSettings.m_viewport.m_width = m_width;
+				m_cameraSettings.m_viewport.m_height = m_height;
+			}
+
+			// Update scene.
+			m_world.update();
+			m_entities.update();
+
+			// Game Systems.
+			cameraUpdate();
+			renderUpdate();
 
 			// Update input.
 			m_input.update();
 
-			// Update scene.
-			m_scene.update();
-
-			// Update settings.
-			m_cameraSettings.m_width  = m_width;
-			m_cameraSettings.m_height = m_height;
-			m_renderSettings.m_width  = m_width;
-			m_renderSettings.m_height = m_height;
-
 			// Some global input stuff (@todo Put this elsewhere?)
-			if (max::inputGetAsBool(0, Action::ToggleMayaBridge))
+			if (max::inputGetAsBool(0, Action::ToggleFullscreen))
 			{
-				if (m_scene.m_mayaBridge == NULL)
-				{
-					// Unload current world.
-					m_scene.unloadWorld();	   
-
-					// Begin maya (this will load world from maya)
-					m_scene.beginMayaBridge(); 
-				}
-				else
-				{
-					// Save world on disk.
-					m_scene.serializeWorld(kDefaultScene); 
-
-					// End maya and unload world.
-					m_scene.endMayaBridge();	
-					m_scene.unloadWorld();
-					
-					// Load world from disk.
-					m_scene.deserializeWorld(kDefaultScene);
-				}
+				max::toggleFullscreen({ 0 });
 			}
-
-			if (max::inputGetAsBool(0, Action::PlayerCamera))
-			{
-				m_renderSettings.m_activeCameraIdx = kDefaultCameraIdx;
-			}
-
-			if (max::inputGetAsBool(0, Action::DebugPlayerCamera))
-			{
-				m_renderSettings.m_activeCameraIdx = kDebugCameraIdx;
-			}
-
 			if (max::inputGetAsBool(0, Action::Quit))
 			{
 				max::destroyWindow({ 0 });
 			}
-
-			// Game Systems.
-			cameraUpdate(&m_cameraSettings);
-			renderUpdate(&m_renderSettings);
 
 			return true;
 		}
@@ -161,9 +409,13 @@ public:
 		return false;
 	}
 
-	Scene m_scene;
+	MayaBridge* m_mayaBridge;
+
+	World m_world;
+	Entities m_entities;
 	Input m_input;
 
+	EngineSettings m_engineSettings;
 	CameraSettings m_cameraSettings;
 	RenderSettings m_renderSettings;
 
@@ -173,4 +425,4 @@ public:
 	uint32_t m_reset;
 };
 
-MAX_IMPLEMENT_MAIN(TwilightGuardian, "Twilight Guardian");
+MAX_IMPLEMENT_MAIN(TwilightGuardian, "TWILIGHT GUARDIAN");

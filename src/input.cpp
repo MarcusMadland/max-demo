@@ -1,5 +1,7 @@
 #include "input.h"
 
+#include <dear-imgui/imgui.h>
+
 Input::Input()
 {
 	m_enable = false;
@@ -78,8 +80,14 @@ Input::Input()
 			}
 
 			Input* input = (Input*)_userData;
-			//return input->m_mouse[1] * 100.0f;
-			
+
+			if (input->m_mouseState.m_buttons[max::MouseButton::Left])
+			{
+				//return input->m_mouse[1] * 100.0f;
+			}
+
+			return 0.0f;
+
 		}, this };
 
 	m_mapping[Action::LookRight] = { Action::LookRight, [](const void* _userData)
@@ -91,30 +99,20 @@ Input::Input()
 			}
 
 			Input* input = (Input*)_userData;
-			//return input->m_mouse[0] * -100.0f;
+
+			if (input->m_mouseState.m_buttons[max::MouseButton::Left])
+			{
+				//return input->m_mouse[0] * -100.0f;
+			}
+
+			return 0.0f;
 
 		}, this };
 
-	m_mapping[Action::ToggleMayaBridge] = { Action::ToggleMayaBridge, [](const void* _userData)
+	m_mapping[Action::ToggleFullscreen] = { Action::ToggleFullscreen, [](const void* _userData)
 		{
-			const bool kb = max::inputGetKeyState(max::Key::F1);
-			max::inputSetKeyState(max::Key::F1, NULL, false);
-
-			return kb ? 1.0f : 0.0f;
-		} };
-
-	m_mapping[Action::PlayerCamera] = { Action::PlayerCamera, [](const void* _userData)
-		{
-			const bool kb = max::inputGetKeyState(max::Key::Key1);
-			max::inputSetKeyState(max::Key::Key1, NULL, false);
-
-			return kb ? 1.0f : 0.0f;
-		} };
-
-	m_mapping[Action::DebugPlayerCamera] = { Action::DebugPlayerCamera, [](const void* _userData)
-		{
-			const bool kb = max::inputGetKeyState(max::Key::Key2);
-			max::inputSetKeyState(max::Key::Key2, NULL, false);
+			const bool kb = max::inputGetKeyState(max::Key::F11);
+			max::inputSetKeyState(max::Key::F11, NULL, false);
 
 			return kb ? 1.0f : 0.0f;
 		} };

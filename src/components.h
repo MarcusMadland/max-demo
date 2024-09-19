@@ -10,23 +10,31 @@ struct TransformComponent
 	bx::Vec3 m_scale;
 };
 
-// @todo Its a little strange to have the path in here but I don't know where else to put it.
-// Resource class that holds path and some data. With load() method?
-// Should have similar thing for mesh, because right now if you have 4 cubes, it will serialize a cube 4 times. Lots of wasted memory...
-struct Material
+struct MaterialComponent
 {
-	max::TextureHandle m_color; 
-	char m_colorPath[1024];
+	struct Texture
+	{
+		max::TextureHandle m_texture; //!< Handle to texture.
+		char m_filepath[1024];	      //!< Path to texture.
+	};
 
-	max::TextureHandle m_normal;
-	char m_normalPath[1024];
+	Texture m_diffuse;	      //!< Diffuse map.
+	float m_diffuseFactor[3]; //!< Diffuse factor.
+
+	Texture m_normal;         //!< Normal map.
+	float m_normalFactor[3];  //!< Normal factor.
+
+	Texture m_roughness;      //!< Rougness map.
+	float m_roughnessFactor;  //!< Rougness factor.
+
+	Texture m_metallic;       //!< Metallic map.
+	float m_metallicFactor;   //!< Metallic factor.
 };
 
-// @todo For optimzation have support for non dynamic mesh as the final runtime wont need dynamic meshes.
 struct RenderComponent
 {
-	max::MeshHandle m_mesh; 
-	Material m_material;
+	max::MeshHandle m_mesh;  //!< Handle to mesh.
+	bool m_castShadows;		 //!< Should cast shadows.
 };
 
 struct CameraComponent
@@ -49,7 +57,72 @@ struct CameraComponent
 	float m_view[16];
 	float m_proj[16];
 	float m_fov;
+	float m_aspect;
 	bx::Vec3 m_position;
 	bx::Vec3 m_direction;
 	bx::Vec3 m_up;
+};
+
+struct LightComponent
+{
+	union Position
+	{
+		struct
+		{
+			float m_x;
+			float m_y;
+			float m_z;
+			float m_w;
+		};
+
+		float m_v[4];
+	};
+
+	union LightRgbPower
+	{
+		struct
+		{
+			float m_r;
+			float m_g;
+			float m_b;
+			float m_power;
+		};
+
+		float m_v[4];
+	};
+
+	union SpotDirectionInner
+	{
+		struct
+		{
+			float m_x;
+			float m_y;
+			float m_z;
+			float m_inner;
+		};
+
+		float m_v[4];
+	};
+
+	union AttenuationSpotOuter
+	{
+		struct
+		{
+			float m_attnConst;
+			float m_attnLinear;
+			float m_attnQuadrantic;
+			float m_outer;
+		};
+
+		float m_v[4];
+	};
+
+	Position              m_position;
+	float				  m_position_viewSpace[4];
+	LightRgbPower         m_ambientPower;
+	LightRgbPower         m_diffusePower;
+	LightRgbPower         m_specularPower;
+	SpotDirectionInner    m_spotDirectionInner;
+	float				  m_spotDirectionInner_viewSpace[4];
+	AttenuationSpotOuter  m_attenuationSpotOuter;
 };

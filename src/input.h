@@ -12,9 +12,7 @@ struct Action
 		LookUp,
 		LookRight,
 
-		ToggleMayaBridge,
-		PlayerCamera,
-		DebugPlayerCamera,
+		ToggleFullscreen,
 		Quit,
 
 		Count
@@ -34,4 +32,6 @@ struct Input
 
 	float m_mouse[3];
 	max::InputMapping m_mapping[Action::Count];
+
+	max::MouseState m_mouseState;
 };

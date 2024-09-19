@@ -23,7 +23,14 @@ endif()
 
 # Sub directories
 add_subdirectory(${ENGINE_DIR} max)
+include(${ENGINE_DIR}/cmake/max/project.cmake)
 
 # max-demo
-include(${ENGINE_DIR}/cmake/max/project.cmake)
 add_max_project(${PROJECT_NAME})
+
+# Include 3rdparties
+include(cmake/dear-imgui.cmake)
+
+# Link to 3rdparties
+target_include_directories(${PROJECT_NAME} PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty")
+target_link_libraries(${PROJECT_NAME} PUBLIC imgui)
