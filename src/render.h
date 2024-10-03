@@ -25,6 +25,8 @@ struct RenderSettings
 	bx::Vec3 m_sunDir = { 0.0f, -1.0f, 0.0f }; //!< Directional light direction.
 	bx::Vec3 m_sunCol = { 1.0f, 1.0f, 1.0f };  //!< Directional light color.
 
+	bx::Vec3 m_probe = { 0.0f, 0.0f, 0.0f };
+
 	enum DebugBuffer
 	{
 		None,

@@ -4,8 +4,6 @@
 
 struct CameraSettings
 {
-	uint32_t m_activeCameraIdx; //!< Current active camera that will be used for rendering.
-
 	struct Rect
 	{
 		uint16_t m_width;

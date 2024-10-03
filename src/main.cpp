@@ -81,7 +81,7 @@ public:
 
 		// Initialize engine.
 		max::Init init;
-		init.rendererType = max::RendererType::OpenGL;
+		init.rendererType = max::RendererType::Vulkan;
 		init.physicsType = max::PhysicsType::Count;
 		init.vendorId = MAX_PCI_ID_NONE;
 		init.platformData.nwh  = max::getNativeWindowHandle({0});
@@ -111,12 +111,11 @@ public:
 		m_engineSettings.m_debugStats = false;
 		m_engineSettings.m_debugGrid = false;
 
-		m_cameraSettings.m_activeCameraIdx = cc->m_idx;
 		m_cameraSettings.m_viewport.m_width = m_width;
 		m_cameraSettings.m_viewport.m_height = m_height;
 		m_cameraSettings.m_near = 0.01f;
 		m_cameraSettings.m_far = 1000.0f;
-		m_cameraSettings.m_moveSpeed = 2.0f;
+		m_cameraSettings.m_moveSpeed = 15.0f;
 		m_cameraSettings.m_lookSpeed = 100.0f;
 
 		m_renderSettings.m_activeCameraIdx = cc->m_idx;
@@ -130,6 +129,7 @@ public:
 		m_renderSettings.m_debugbuffer = RenderSettings::None;
 		m_renderSettings.m_sunDir = { 0.0f, -1.0f, 0.0f };
 		m_renderSettings.m_sunCol = { 1.0f, 1.0f, 1.0f };
+		m_renderSettings.m_probe = { 1.0f, 1.0f, 1.0f };
 		m_renderSettings.m_shadowMap.m_width = 1024;
 		m_renderSettings.m_shadowMap.m_height = 1024;
 
@@ -186,6 +186,8 @@ public:
 			{
 				if (ImGui::CollapsingHeader("Engine Settings", ImGuiTreeNodeFlags_DefaultOpen))
 				{
+					ImGui::SeparatorText("Graphics API");
+
 					ImGui::Checkbox("VSync", &m_engineSettings.m_vsync);
 
 					uint32_t reset = m_reset;
@@ -194,6 +196,8 @@ public:
 					{
 						max::reset(m_width, m_height, m_reset);
 					}
+
+					ImGui::SeparatorText("Debug");
 
 					ImGui::Checkbox("Debug Text", &m_engineSettings.m_debugText);
 					ImGui::Checkbox("Debug Grid", &m_engineSettings.m_debugGrid);
@@ -205,6 +209,8 @@ public:
 
 				if (ImGui::CollapsingHeader("Render Settings", ImGuiTreeNodeFlags_DefaultOpen))
 				{
+					ImGui::SeparatorText("Renderer");
+
 					ImGui::SliderInt("Active Render Camera", (int*)&m_renderSettings.m_activeCameraIdx, 0, 1);
 
 					static int currentResolutionIndex = 0;
@@ -230,20 +236,7 @@ public:
 						ImGui::EndCombo();
 					}
 
-					//static float s_sunAzimuth = 140.0f;
-					//static float s_sunElevation = 70.0f;
-					//ImGui::SliderFloat("Sun Azimuth", &s_sunAzimuth, 0.0f, 360.0f);
-					//ImGui::SliderFloat("Sun Elevation", &s_sunElevation, 0.0f, 90.0f);
-					//
-					//const double azimuth = bx::toRad(s_sunAzimuth);
-					//const double elevation = bx::toRad(s_sunElevation);
-					//m_renderSettings.m_sunDir.x = cos(azimuth) * cos(elevation);
-					//m_renderSettings.m_sunDir.y = sin(azimuth) * cos(elevation);
-					//m_renderSettings.m_sunDir.z = sin(elevation);
-
-					ImGui::SliderFloat3("Sun Dir", &m_renderSettings.m_sunDir.x, -1.0f, 1.0f);
-
-					ImGui::SliderFloat3("Sun Color", &m_renderSettings.m_sunCol.x, 0.0f, 1.0f);
+					ImGui::SeparatorText("Shadows");
 
 					static int currentShadowmapIndex = 0;
 					if (ImGui::BeginCombo("Shadow Resolution", s_shadowmap[currentShadowmapIndex].m_label))
@@ -268,6 +261,8 @@ public:
 						ImGui::EndCombo();
 					}
 
+					ImGui::SeparatorText("Debug");
+
 					static int currentDebugbufferIndex = 0;
 					if (ImGui::BeginCombo("Debug Buffer", s_debugbuffers[currentDebugbufferIndex].m_label))
 					{
@@ -291,9 +286,13 @@ public:
 
 				if (ImGui::CollapsingHeader("Camera Settings", ImGuiTreeNodeFlags_DefaultOpen))
 				{
-					ImGui::SliderInt("Active Camera", (int*)&m_cameraSettings.m_activeCameraIdx, 0, 1);
+					ImGui::SeparatorText("Camera");
+
 					ImGui::SliderFloat("Near", &m_cameraSettings.m_near, 0.0f, 1.0f);
 					ImGui::SliderFloat("Far", &m_cameraSettings.m_far, 1.0f, 10000.0f);
+
+					ImGui::SeparatorText("Controller");
+
 					ImGui::SliderFloat("Sensitivity", &m_cameraSettings.m_lookSpeed, 0.1f, 200.0f);
 					ImGui::SliderFloat("Speed", &m_cameraSettings.m_moveSpeed, 0.1f, 50.0f);
 				}
@@ -339,6 +338,7 @@ public:
 			{
 				max::dbgDrawBegin(1); // Draw in gbuffer view.
 				max::dbgDrawGrid(max::Axis::Y, { 0.0f, 0.0f, 0.0f });
+				//max::dbgDrawAxis(0.0f, -2.0f, 0.0f, 1.0f, max::Axis::X, 2.0f);
 				max::dbgDrawEnd();
 			}
 
