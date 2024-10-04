@@ -1076,8 +1076,8 @@ struct Accumulation
 		max::setTexture(0, s_surface, _gbuffer->m_gbuffer[GBuffer::TextureType::Surface]);
 		max::setTexture(1, s_normal, _gbuffer->m_gbuffer[GBuffer::TextureType::Normal]);
 		max::setTexture(2, s_depth, _gbuffer->m_gbuffer[GBuffer::TextureType::Depth]);
-		//max::setTexture(3, s_radiance, _gi->m_atlasTest);
 		max::setTexture(3, s_radiance, _gi->m_diffuseAtlas);
+		//max::setTexture(3, s_radiance, _gi->m_radianceTexture);
 		max::setTexture(4, s_depthAtlas, _gi->m_depthAtlas);
 		//max::setTexture(4, s_irradiance, _gi->m_irradianceTexture);
 

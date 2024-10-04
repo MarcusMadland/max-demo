@@ -80,16 +80,12 @@ void main()
     // Compute final texel coordinates in the atlas
     vec2 texel = floor(atlasOffsetTexel + octTexel);
 
-    // Sample radiance using texelFetch (or texture2D with normalized coords)
-#if MAX_SHADER_LANGUAGE_GLSL
-    vec3 radiance = vec3_splat(1.0);
-#else
+    // Sample radiance using texelFetch
     vec3 radiance = texelFetch(s_radiance, ivec2(texel), 0).rgb; 
-#endif
 
     // Output to render targets
     gl_FragData[0] = vec4(radiance, 1.0); 
     gl_FragData[1] = vec4(probeGridPosition / gridSize, 1.0); // For debugging voxels.
-    gl_FragData[1] = vec4(probeGridPosition, 1.0); // For debugging voxels.
-    gl_FragData[1] = vec4(atlasOffsetTexel, 0.0, 1.0); // For debugging voxels.
+    //gl_FragData[1] = vec4(probeGridPosition, 1.0); // For debugging voxels.
+    //gl_FragData[1] = vec4(atlasOffsetTexel, 0.0, 1.0); // For debugging voxels.
 }

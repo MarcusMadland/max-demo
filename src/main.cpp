@@ -1,6 +1,7 @@
 #include <max/max.h>
 
-#include "imgui/imgui.h"
+#include "imgui/imgui.h" // 3rdparty
+
 #include "world.h"
 #include "entities.h"
 #include "input.h"
@@ -12,48 +13,6 @@
 #	define TG_CONFIG_WITH_EDITOR_TOOLS 1
 #endif // TG_CONFIG_WITH_EDITOR_TOOLS
 
-constexpr uint32_t kDefaultWindow = 0;
-
-struct Resolution 
-{
-	const char* m_label;
-	int m_width;
-	int m_height;
-};
-
-static Resolution s_resolutions[] = 
-{
-	{ "1920x1080", 1920, 1080 },
-	{ "1280x720", 1280, 720 },
-	{ "720x480", 720, 480 },
-	{ "480x360", 480, 360 },
-};
-
-static Resolution s_shadowmap[] =
-{
-	{ "4096x4096", 4096, 4096 },
-	{ "2048x2048", 2048, 2048 },
-	{ "1024x1024", 1024, 1024 },
-	{ "512x512", 512, 512 },
-};
-
-struct DebugBuffer
-{
-	const char* m_label;
-	RenderSettings::DebugBuffer m_enum;
-};
-
-static DebugBuffer s_debugbuffers[] =
-{
-	{ "None", RenderSettings::DebugBuffer::None },
-	{ "Diffuse", RenderSettings::DebugBuffer::Diffuse },
-	{ "Normal", RenderSettings::DebugBuffer::Normal },
-	{ "Surface", RenderSettings::DebugBuffer::Surface },
-	{ "Depth", RenderSettings::DebugBuffer::Depth },
-	{ "Irradiance", RenderSettings::DebugBuffer::Irradiance },
-	{ "Specular", RenderSettings::DebugBuffer::Specular },
-};
-
 struct EngineSettings
 {
 	bool m_vsync;
@@ -63,54 +22,27 @@ struct EngineSettings
 	bool m_debugStats;
 };
 
-class TwilightGuardian : public max::AppI
+struct TwilightGuardian : public max::AppI
 {
-public:
 	TwilightGuardian(const char* _name)
 		: max::AppI(_name)
-	{}
-
-	void init(int32_t _argc, const char* const* _argv, uint32_t _width, uint32_t _height) override
 	{
-		m_mayaBridge = NULL;
+		// Default.
+		m_width = 1280;
+		m_height = 720;
+		m_debug = MAX_DEBUG_NONE;
+		m_reset = MAX_RESET_NONE;
 
-		m_width  = _width;
-		m_height = _height;
-		m_debug  = MAX_DEBUG_NONE;
-		m_reset  = MAX_RESET_NONE;
+		// @todo Need config file support for settings. This should be serialized on disk so we don't need
+		// to fucking recompile the entire game just to change something here when TG_CONFIG_WITH_EDITOR_TOOLS
+		// is false. Will also make it easier for settings menu in the future.
 
-		// Initialize engine.
-		max::Init init;
-		init.rendererType = max::RendererType::Vulkan;
-		init.physicsType = max::PhysicsType::Count;
-		init.vendorId = MAX_PCI_ID_NONE;
-		init.platformData.nwh  = max::getNativeWindowHandle({0});
-		init.platformData.type = max::getNativeWindowHandleType();
-		init.platformData.ndt  = max::getNativeDisplayHandle();
-		init.resolution.width  = m_width;
-		init.resolution.height = m_height;
-		init.resolution.reset  = m_reset;
-		max::init(init);
-
-#if TG_CONFIG_WITH_EDITOR_TOOLS
-		// ImGui
-		imguiCreate();
-#endif
-		
-		// Load scene.
-		m_world.load("scenes/scene.bin");
-		m_entities.load();
-
-		// Enable input.
-		m_input.enable();
-
-		// System settings. @todo Let's have a '.config' file for this that can be modified through settings menu.
-		CameraComponent* cc = max::getComponent<CameraComponent>(m_entities.m_entities["Player"].m_handle);
-
+		// Engine settings.
 		m_engineSettings.m_debugText = false;
 		m_engineSettings.m_debugStats = false;
 		m_engineSettings.m_debugGrid = false;
 
+		// Camera settings.
 		m_cameraSettings.m_viewport.m_width = m_width;
 		m_cameraSettings.m_viewport.m_height = m_height;
 		m_cameraSettings.m_near = 0.01f;
@@ -118,9 +50,10 @@ public:
 		m_cameraSettings.m_moveSpeed = 15.0f;
 		m_cameraSettings.m_lookSpeed = 100.0f;
 
-		m_renderSettings.m_activeCameraIdx = cc->m_idx;
-		m_renderSettings.m_resolution.m_height = s_resolutions[0].m_width;
-		m_renderSettings.m_resolution.m_width = s_resolutions[0].m_height;
+		// Render settings.
+		m_renderSettings.m_activeCameraIdx = 1;
+		m_renderSettings.m_resolution.m_height = m_width;
+		m_renderSettings.m_resolution.m_width = m_height;
 		m_renderSettings.m_viewport.m_height = m_width;
 		m_renderSettings.m_viewport.m_height = m_height;
 		m_renderSettings.m_skybox = "textures/bolonga_lod.dds";
@@ -133,28 +66,60 @@ public:
 		m_renderSettings.m_shadowMap.m_width = 1024;
 		m_renderSettings.m_shadowMap.m_height = 1024;
 
-		// Systems.
+#if TG_CONFIG_WITH_EDITOR_TOOLS
+		m_mayaBridge = NULL;
+#endif // TG_CONFIG_WITH_EDITOR_TOOLS
+	}
+
+	void init(int32_t _argc, const char* const* _argv, uint32_t _width, uint32_t _height) override
+	{
+		// Initialize engine.
+		max::Init init;
+		init.rendererType = max::RendererType::OpenGL;
+		init.physicsType = max::PhysicsType::Count;
+		init.vendorId = MAX_PCI_ID_NONE;
+		init.platformData.nwh  = max::getNativeWindowHandle({0});
+		init.platformData.type = max::getNativeWindowHandleType();
+		init.platformData.ndt  = max::getNativeDisplayHandle();
+		init.resolution.width  = m_width;
+		init.resolution.height = m_height;
+		init.resolution.reset  = m_reset;
+		max::init(init);
+		
+		// Load scenes.
+		m_world.load("scenes/scene.bin");
+		m_entities.load();
+
+		// Enable input.
+		m_input.enable();
+
+		// Create systems.
 		cameraCreate(&m_cameraSettings);
 		renderCreate(&m_renderSettings);
+
+#if TG_CONFIG_WITH_EDITOR_TOOLS
+		imguiCreate();
+#endif // TG_CONFIG_WITH_EDITOR_TOOLS
+
 	}
 
 	virtual int shutdown() override
 	{
-		// Systems.
+
+#if TG_CONFIG_WITH_EDITOR_TOOLS
+		imguiDestroy();
+#endif // TG_CONFIG_WITH_EDITOR_TOOLS
+
+		// Destroy systems.
 		renderDestroy();
 		cameraDestroy();
 
 		// Disable input.
 		m_input.disable();
 
-		// Unload scene.
+		// Unload scenes.
 		m_world.unload();
 		m_entities.unload();
-
-#if TG_CONFIG_WITH_EDITOR_TOOLS
-		// ImGui
-		imguiDestroy();
-#endif
 
 		// Shutdown engine.
 		max::shutdown();
@@ -178,6 +143,46 @@ public:
 				, uint16_t(m_width)
 				, uint16_t(m_height)
 			);
+
+			struct Resolution
+			{
+				const char* m_label;
+				int m_width;
+				int m_height;
+			};
+
+			const Resolution s_resolutions[] =
+			{
+				{ "1920x1080", 1920, 1080 },
+				{ "1280x720", 1280, 720 },
+				{ "720x480", 720, 480 },
+				{ "480x360", 480, 360 },
+			};
+
+			const Resolution s_shadowmap[] =
+			{
+				{ "4096x4096", 4096, 4096 },
+				{ "2048x2048", 2048, 2048 },
+				{ "1024x1024", 1024, 1024 },
+				{ "512x512", 512, 512 },
+			};
+
+			struct DebugBuffer
+			{
+				const char* m_label;
+				RenderSettings::DebugBuffer m_enum;
+			};
+
+			const DebugBuffer s_debugbuffers[] =
+			{
+				{ "None", RenderSettings::DebugBuffer::None },
+				{ "Diffuse", RenderSettings::DebugBuffer::Diffuse },
+				{ "Normal", RenderSettings::DebugBuffer::Normal },
+				{ "Surface", RenderSettings::DebugBuffer::Surface },
+				{ "Depth", RenderSettings::DebugBuffer::Depth },
+				{ "Irradiance", RenderSettings::DebugBuffer::Irradiance },
+				{ "Specular", RenderSettings::DebugBuffer::Specular },
+			};
 
 			ImGui::SetNextWindowPos(ImVec2(10, 10));
 			ImGui::SetNextWindowSizeConstraints({ 200, 100 }, { 1920, 1920 });
@@ -368,14 +373,15 @@ public:
 
 				max::dbgTextPrintf(0, 0, 0xf, "Connected to maya...");
 			}
-#endif
+#endif  // TG_CONFIG_WITH_EDITOR_TOOLS
 
 			// Resize.
-			if (m_width != m_renderSettings.m_viewport.m_width ||
+			if (m_width  != m_renderSettings.m_viewport.m_width ||
 				m_height != m_renderSettings.m_viewport.m_height)
 			{
 				m_renderSettings.m_viewport.m_width = m_width;
 				m_renderSettings.m_viewport.m_height = m_height;
+				
 				renderReset();
 
 				m_cameraSettings.m_viewport.m_width = m_width;
@@ -386,14 +392,14 @@ public:
 			m_world.update();
 			m_entities.update();
 
-			// Game Systems.
+			// Update systems.
 			cameraUpdate();
 			renderUpdate();
 
 			// Update input.
 			m_input.update();
 
-			// Some global input stuff (@todo Put this elsewhere?)
+			// Some global input stuff @todo Dude seriously put this fucking elsewhere...
 			if (max::inputGetAsBool(0, Action::ToggleFullscreen))
 			{
 				max::toggleFullscreen({ 0 });
@@ -409,20 +415,22 @@ public:
 		return false;
 	}
 
-	MayaBridge* m_mayaBridge;
-
-	World m_world;
-	Entities m_entities;
-	Input m_input;
+	uint32_t m_width;
+	uint32_t m_height;
+	uint32_t m_debug;
+	uint32_t m_reset;
 
 	EngineSettings m_engineSettings;
 	CameraSettings m_cameraSettings;
 	RenderSettings m_renderSettings;
 
-	uint32_t m_width;
-	uint32_t m_height;
-	uint32_t m_debug;
-	uint32_t m_reset;
+	World m_world;
+	Entities m_entities;
+	Input m_input;
+
+#if TG_CONFIG_WITH_EDITOR_TOOLS
+	MayaBridge* m_mayaBridge;
+#endif // TG_CONFIG_WITH_EDITOR_TOOLS
 };
 
 MAX_IMPLEMENT_MAIN(TwilightGuardian, "TWILIGHT GUARDIAN");
