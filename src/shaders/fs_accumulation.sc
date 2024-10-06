@@ -3,11 +3,12 @@ $input v_texcoord0
 #include "common/common.sh"
 #include "common/uniforms.sh"
 
-SAMPLER2D(s_surface,  0); // GBuffer Surface: This contains metallic and roughness values only. Diffuse is not used here since this shader will only output light
-SAMPLER2D(s_normal,   1); // GBuffer Normal
-SAMPLER2D(s_depth,    2); // GBuffer Depth
-
-SAMPLER2D(s_radiance, 3); // Atlas of octahedral probes (x*y, z)
+SAMPLER2D(s_surface,         0); // GBuffer Surface
+SAMPLER2D(s_normal,          1); // GBuffer Normal
+SAMPLER2D(s_depth,           2); // GBuffer Depth
+SAMPLER2D(s_radianceAtlas,   3); // Atlas of radiance octahedral probes (x*y, z)
+SAMPLER2D(s_irradianceAtlas, 4); // Atlas of irradiance probes (x*y, z)
+SAMPLER2D(s_depthAtlas,      5); // Atlas of radiance probes (x*y, z)
 
 vec3 getClosestProbeGridPosition(vec3 wpos, vec3 gridOrigin, vec3 gridSpacing, vec3 gridSize)
 {
@@ -68,9 +69,7 @@ void main()
 
     // Get octahedral coords based on surface normal
     vec2 octCoord = encodeNormalOctahedron(normal);
-#if !MAX_SHADER_LANGUAGE_GLSL
     octCoord.y = 1.0 - octCoord.y;
-#endif // !MAX_SHADER_LANGUAGE_GLSL
     vec2 octTexel = (octCoord * octMapRes);
 
     // Calculate the atlas offset for the desired octahedral map
@@ -81,7 +80,7 @@ void main()
     vec2 texel = floor(atlasOffsetTexel + octTexel);
 
     // Sample radiance using texelFetch
-    vec3 radiance = texelFetch(s_radiance, ivec2(texel), 0).rgb; 
+    vec3 radiance = texelFetch(s_radianceAtlas, ivec2(texel), 0).rgb; 
 
     // Output to render targets
     gl_FragData[0] = vec4(radiance, 1.0); 

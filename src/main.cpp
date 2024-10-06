@@ -13,56 +13,62 @@
 #	define TG_CONFIG_WITH_EDITOR_TOOLS 1
 #endif // TG_CONFIG_WITH_EDITOR_TOOLS
 
+static const uint32_t kAppWidth = 1280;
+static const uint32_t kAppHeight = 720;
+
+/// Engine settings.
+///
 struct EngineSettings
 {
-	bool m_vsync;
-
-	bool m_debugGrid;
-	bool m_debugText;
-	bool m_debugStats;
+	uint32_t m_width;  //!< Desired width of the viewport/res/window
+	uint32_t m_height; //!< Desired height of the viewport/res/window
+	uint32_t m_debug;  //!< Debug mode. See `MAX_DEBUG_` flags.
+	uint32_t m_reset;  //!< Reset mode. See `MAX_RESET_` flags.
 };
 
+static bool processEvents(EngineSettings* _settings, Input* _input)
+{
+	return max::processEvents(
+		_settings->m_width,
+		_settings->m_height,
+		_settings->m_debug,
+		_settings->m_reset,
+		&_input->m_mouseState);
+}
+
+/// Application implementation with max.
+///
 struct TwilightGuardian : public max::AppI
 {
 	TwilightGuardian(const char* _name)
 		: max::AppI(_name)
 	{
-		// Default.
-		m_width = 1280;
-		m_height = 720;
-		m_debug = MAX_DEBUG_NONE;
-		m_reset = MAX_RESET_NONE;
-
 		// @todo Need config file support for settings. This should be serialized on disk so we don't need
 		// to fucking recompile the entire game just to change something here when TG_CONFIG_WITH_EDITOR_TOOLS
 		// is false. Will also make it easier for settings menu in the future.
 
 		// Engine settings.
-		m_engineSettings.m_debugText = false;
-		m_engineSettings.m_debugStats = false;
-		m_engineSettings.m_debugGrid = false;
+		m_engineSettings.m_width = kAppWidth;
+		m_engineSettings.m_height = kAppHeight;
+		m_engineSettings.m_debug = MAX_DEBUG_NONE;
+		m_engineSettings.m_reset = MAX_RESET_NONE;
 
 		// Camera settings.
-		m_cameraSettings.m_viewport.m_width = m_width;
-		m_cameraSettings.m_viewport.m_height = m_height;
+		m_cameraSettings.m_viewport.m_width = kAppWidth;
+		m_cameraSettings.m_viewport.m_height = kAppHeight;
 		m_cameraSettings.m_near = 0.01f;
 		m_cameraSettings.m_far = 1000.0f;
 		m_cameraSettings.m_moveSpeed = 15.0f;
 		m_cameraSettings.m_lookSpeed = 100.0f;
 
 		// Render settings.
+		m_renderSettings.m_resolution.m_height = kAppWidth;
+		m_renderSettings.m_resolution.m_width = kAppHeight;
+		m_renderSettings.m_viewport.m_height = kAppWidth;
+		m_renderSettings.m_viewport.m_height = kAppHeight;
 		m_renderSettings.m_activeCameraIdx = 1;
-		m_renderSettings.m_resolution.m_height = m_width;
-		m_renderSettings.m_resolution.m_width = m_height;
-		m_renderSettings.m_viewport.m_height = m_width;
-		m_renderSettings.m_viewport.m_height = m_height;
 		m_renderSettings.m_skybox = "textures/bolonga_lod.dds";
-		m_renderSettings.m_radiance = "textures/bolonga_lod.dds";
-		m_renderSettings.m_irradiance = "textures/bolonga_irr.dds";
 		m_renderSettings.m_debugbuffer = RenderSettings::None;
-		m_renderSettings.m_sunDir = { 0.0f, -1.0f, 0.0f };
-		m_renderSettings.m_sunCol = { 1.0f, 1.0f, 1.0f };
-		m_renderSettings.m_probe = { 1.0f, 1.0f, 1.0f };
 		m_renderSettings.m_shadowMap.m_width = 1024;
 		m_renderSettings.m_shadowMap.m_height = 1024;
 
@@ -81,9 +87,9 @@ struct TwilightGuardian : public max::AppI
 		init.platformData.nwh  = max::getNativeWindowHandle({0});
 		init.platformData.type = max::getNativeWindowHandleType();
 		init.platformData.ndt  = max::getNativeDisplayHandle();
-		init.resolution.width  = m_width;
-		init.resolution.height = m_height;
-		init.resolution.reset  = m_reset;
+		init.resolution.width  = kAppWidth;
+		init.resolution.height = kAppHeight;
+		init.resolution.reset  = m_engineSettings.m_reset;
 		max::init(init);
 		
 		// Load scenes.
@@ -105,7 +111,6 @@ struct TwilightGuardian : public max::AppI
 
 	virtual int shutdown() override
 	{
-
 #if TG_CONFIG_WITH_EDITOR_TOOLS
 		imguiDestroy();
 #endif // TG_CONFIG_WITH_EDITOR_TOOLS
@@ -130,7 +135,7 @@ struct TwilightGuardian : public max::AppI
 	bool update() override
 	{
 		// Process events.
-		if (!max::processEvents(m_width, m_height, m_debug, m_reset, &m_input.m_mouseState) )
+		if (!processEvents(&m_engineSettings, &m_input))
 		{
 #if TG_CONFIG_WITH_EDITOR_TOOLS
 			// Imgui.
@@ -140,8 +145,8 @@ struct TwilightGuardian : public max::AppI
 				| (m_input.m_mouseState.m_buttons[max::MouseButton::Right] ? IMGUI_MBUT_RIGHT : 0)
 				| (m_input.m_mouseState.m_buttons[max::MouseButton::Middle] ? IMGUI_MBUT_MIDDLE : 0)
 				, m_input.m_mouseState.m_mz
-				, uint16_t(m_width)
-				, uint16_t(m_height)
+				, uint16_t(m_engineSettings.m_width)
+				, uint16_t(m_engineSettings.m_height)
 			);
 
 			struct Resolution
@@ -193,23 +198,15 @@ struct TwilightGuardian : public max::AppI
 				{
 					ImGui::SeparatorText("Graphics API");
 
-					ImGui::Checkbox("VSync", &m_engineSettings.m_vsync);
+					static bool s_vsync = false;
+					ImGui::Checkbox("VSync", &s_vsync);
 
-					uint32_t reset = m_reset;
-					m_reset = (m_engineSettings.m_vsync ? (m_reset | MAX_RESET_VSYNC) : (m_reset & ~MAX_RESET_VSYNC));
-					if (m_reset != reset)
+					uint32_t reset = m_engineSettings.m_reset;
+					m_engineSettings.m_reset = (s_vsync ? (m_engineSettings.m_reset | MAX_RESET_VSYNC) : (m_engineSettings.m_reset & ~MAX_RESET_VSYNC));
+					if (m_engineSettings.m_reset != reset)
 					{
-						max::reset(m_width, m_height, m_reset);
+						max::reset(m_engineSettings.m_width, m_engineSettings.m_height, m_engineSettings.m_reset);
 					}
-
-					ImGui::SeparatorText("Debug");
-
-					ImGui::Checkbox("Debug Text", &m_engineSettings.m_debugText);
-					ImGui::Checkbox("Debug Grid", &m_engineSettings.m_debugGrid);
-					ImGui::Checkbox("Debug Stats", &m_engineSettings.m_debugStats);
-
-					m_debug = (m_engineSettings.m_debugText ? (m_debug | MAX_DEBUG_TEXT) : (m_debug & ~MAX_DEBUG_TEXT));
-					m_debug = (m_engineSettings.m_debugStats ? (m_debug | MAX_DEBUG_STATS) : (m_debug & ~MAX_DEBUG_STATS));
 				}
 
 				if (ImGui::CollapsingHeader("Render Settings", ImGuiTreeNodeFlags_DefaultOpen))
@@ -337,15 +334,8 @@ struct TwilightGuardian : public max::AppI
 			imguiEndFrame();
 
 			// Set debug mode.
-			max::setDebug(m_debug);
+			max::setDebug(m_engineSettings.m_debug);
 			max::dbgTextClear();
-			if (m_engineSettings.m_debugGrid)
-			{
-				max::dbgDrawBegin(1); // Draw in gbuffer view.
-				max::dbgDrawGrid(max::Axis::Y, { 0.0f, 0.0f, 0.0f });
-				//max::dbgDrawAxis(0.0f, -2.0f, 0.0f, 1.0f, max::Axis::X, 2.0f);
-				max::dbgDrawEnd();
-			}
 
 			if (true)
 			{
@@ -376,16 +366,15 @@ struct TwilightGuardian : public max::AppI
 #endif  // TG_CONFIG_WITH_EDITOR_TOOLS
 
 			// Resize.
-			if (m_width  != m_renderSettings.m_viewport.m_width ||
-				m_height != m_renderSettings.m_viewport.m_height)
+			if (m_engineSettings.m_width  != m_renderSettings.m_viewport.m_width ||
+				m_engineSettings.m_height != m_renderSettings.m_viewport.m_height)
 			{
-				m_renderSettings.m_viewport.m_width = m_width;
-				m_renderSettings.m_viewport.m_height = m_height;
-				
-				renderReset();
+				m_renderSettings.m_viewport.m_width  = m_engineSettings.m_width;
+				m_renderSettings.m_viewport.m_height = m_engineSettings.m_height;
+				m_cameraSettings.m_viewport.m_width  = m_engineSettings.m_width;
+				m_cameraSettings.m_viewport.m_height = m_engineSettings.m_height;
 
-				m_cameraSettings.m_viewport.m_width = m_width;
-				m_cameraSettings.m_viewport.m_height = m_height;
+				renderReset();
 			}
 
 			// Update scene.
@@ -399,26 +388,11 @@ struct TwilightGuardian : public max::AppI
 			// Update input.
 			m_input.update();
 
-			// Some global input stuff @todo Dude seriously put this fucking elsewhere...
-			if (max::inputGetAsBool(0, Action::ToggleFullscreen))
-			{
-				max::toggleFullscreen({ 0 });
-			}
-			if (max::inputGetAsBool(0, Action::Quit))
-			{
-				max::destroyWindow({ 0 });
-			}
-
 			return true;
 		}
 
 		return false;
 	}
-
-	uint32_t m_width;
-	uint32_t m_height;
-	uint32_t m_debug;
-	uint32_t m_reset;
 
 	EngineSettings m_engineSettings;
 	CameraSettings m_cameraSettings;

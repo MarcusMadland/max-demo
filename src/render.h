@@ -1,9 +1,10 @@
 #pragma once
 
 #include <bx/uint32_t.h>
-
 #include <bx/math.h>
 
+/// Render settings.
+/// 
 struct RenderSettings
 {
 	uint32_t m_activeCameraIdx; //!< Current active camera that will be used for rendering.
@@ -20,12 +21,6 @@ struct RenderSettings
 	Rect m_shadowMap; //!< Shadowmap resolution.
 
 	const char* m_skybox;     //!< @todo	
-	const char* m_irradiance; //!< Irradiance map used for image based lighting.
-	const char* m_radiance; //!< Radiance map used for image based lighting.
-	bx::Vec3 m_sunDir = { 0.0f, -1.0f, 0.0f }; //!< Directional light direction.
-	bx::Vec3 m_sunCol = { 1.0f, 1.0f, 1.0f };  //!< Directional light color.
-
-	bx::Vec3 m_probe = { 0.0f, 0.0f, 0.0f };
 
 	enum DebugBuffer
 	{
@@ -47,11 +42,21 @@ struct RenderSettings
 	bool m_debugbufferB;
 };
 
+/// Create render system context.
+/// 
+/// @param[in] _settings Render settings.
+/// 
 void renderCreate(RenderSettings* _settings);
 
+/// Destroy render system context.
+/// 
 void renderDestroy();
 
+/// Update render system. 
+///
 void renderUpdate();
 
+/// Reset render system and all render techniques.
+/// 
 void renderReset();
 

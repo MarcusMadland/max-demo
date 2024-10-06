@@ -132,6 +132,16 @@ Input::Input()
 void Input::update()
 {
 	max::inputGetMouse(m_mouse);
+
+	// Some global input stuff @todo Dude seriously put this fucking elsewhere...
+	if (max::inputGetAsBool(0, Action::ToggleFullscreen))
+	{
+		max::toggleFullscreen({ 0 });
+	}
+	if (max::inputGetAsBool(0, Action::Quit))
+	{
+		max::destroyWindow({ 0 });
+	}
 }
 
 void Input::enable()
