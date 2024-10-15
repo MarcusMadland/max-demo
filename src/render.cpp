@@ -100,13 +100,33 @@ struct Faces
 	};
 };
 
+const bx::Vec3 s_targets[Faces::Count] =
+{
+	{ 1.0f,  0.0f,  0.0f },  // +X 
+	{-1.0f,  0.0f,  0.0f },  // -X
+	{ 0.0f,  1.0f,  0.0f },  // +Y
+	{ 0.0f, -1.0f,  0.0f },  // -Y
+	{ 0.0f,  0.0f,  1.0f },  // +Z
+	{ 0.0f,  0.0f, -1.0f },  // -Z
+};
+
+const bx::Vec3 s_ups[Faces::Count] =
+{
+	{ 0.0f,  1.0f,  0.0f },  // +X
+	{ 0.0f,  1.0f,  0.0f },  // -X
+	{ 0.0f,  0.0f, -1.0f },  // +Y
+	{ 0.0f,  0.0f,  1.0f },  // -Y
+	{ 0.0f,  1.0f,  0.0f },  // +Z
+	{ 0.0f,  1.0f,  0.0f },  // -Z
+};
+
 /// Global uniforms.
 ///
 struct Uniforms
 {
 	void create()
 	{
-		u_perFrame = max::createUniform("u_perframe", max::UniformType::Vec4, 9);
+		u_perFrame = max::createUniform("u_perframe", max::UniformType::Vec4, 20);
 		u_perDraw = max::createUniform("u_perdraw", max::UniformType::Vec4, 3);
 	}
 
@@ -118,7 +138,7 @@ struct Uniforms
 
 	void submitPerFrame()
 	{
-		max::setUniform(u_perFrame, m_perFrame, 9);
+		max::setUniform(u_perFrame, m_perFrame, 20);
 	}
 
 	void submitPerDraw()
@@ -138,15 +158,34 @@ struct Uniforms
 				/* 2*/ struct { float m_invViewProj2[4]; };
 				/* 3*/ struct { float m_invViewProj3[4]; };
 			};
-			/*4*/ struct { float m_lightDir[3],   m_unused10; };
-			/*5*/ struct { float m_lightCol[3],   m_unused11; };
-			/*6*/ struct { float m_volumeMin[3],  m_volumeSpacing; };
-			/*7*/ struct { float m_volumeMax[3],  m_unused12; };
-			/*8*/ struct { float m_volumeSize[3], m_unused13; };
-			/*9 COUNT*/
+			union
+			{
+				float m_cameraMtx[16];
+				/* 4*/ struct { float m_cameraMtx0[4]; };
+				/* 5*/ struct { float m_cameraMtx1[4]; };
+				/* 6*/ struct { float m_cameraMtx2[4]; };
+				/* 7*/ struct { float m_cameraMtx3[4]; };
+			};
+			/*8*/  struct { float m_lightDir[3],     m_width; };
+			/*9*/  struct { float m_lightCol[3],     m_height; };
+			/*10*/ struct { float m_volumeMin[3],    m_volumeSpacing; };
+			/*11*/ struct { float m_volumeMax[3],    m_time; };
+			/*12*/ struct { float m_volumeSize[3],   m_exposition; };
+			/*13*/ struct { float m_skyLuminance[3], m_sunBloom; };
+			/*14*/ struct { float m_sunLuminance[3], m_sunSize; };
+			union
+			{
+				float m_perezCoeff[20];
+				/* 15*/ struct { float m_perezCoeff0[4]; };
+				/* 16*/ struct { float m_perezCoeff1[4]; };
+				/* 17*/ struct { float m_perezCoeff2[4]; };
+				/* 18*/ struct { float m_perezCoeff3[4]; };
+				/* 19*/ struct { float m_perezCoeff4[4]; };
+			};
+			/*20 COUNT*/
 		};
 
-		float m_perFrame[9 * 4];
+		float m_perFrame[20 * 4];
 	};
 
 	union
@@ -164,6 +203,75 @@ struct Uniforms
 
 	max::UniformHandle u_perFrame;
 	max::UniformHandle u_perDraw;
+};
+
+/// Global samplers.
+///
+struct Samplers
+{
+	void create()
+	{
+		s_materialDiffuse = max::createUniform("s_materialDiffuse", max::UniformType::Sampler);
+		s_materialNormal = max::createUniform("s_materialNormal", max::UniformType::Sampler);
+		s_materialRoughness = max::createUniform("s_materialRoughness", max::UniformType::Sampler);
+		s_materialMetallic = max::createUniform("s_materialMetallic", max::UniformType::Sampler);
+		s_cubeDiffuse = max::createUniform("s_cubeDiffuse", max::UniformType::Sampler);
+		s_cubeNormal = max::createUniform("s_cubeNormal", max::UniformType::Sampler);
+		s_cubePosition = max::createUniform("s_cubePosition", max::UniformType::Sampler);
+		s_cubeDepth = max::createUniform("s_cubeDepth", max::UniformType::Sampler);
+		s_atlasDiffuse = max::createUniform("s_atlasDiffuse", max::UniformType::Sampler);
+		s_atlasNormal = max::createUniform("s_atlasNormal", max::UniformType::Sampler);
+		s_atlasPosition = max::createUniform("s_atlasPosition", max::UniformType::Sampler);
+		s_atlasDepth = max::createUniform("s_atlasDepth", max::UniformType::Sampler);
+		s_atlasRadiance = max::createUniform("s_atlasRadiance", max::UniformType::Sampler);
+		s_atlasIrradiance = max::createUniform("s_atlasIrradiance", max::UniformType::Sampler);
+		s_gbufferDiffuse = max::createUniform("s_gbufferDiffuse", max::UniformType::Sampler);
+		s_gbufferNormal = max::createUniform("s_gbufferNormal", max::UniformType::Sampler);
+		s_gbufferSurface = max::createUniform("s_gbufferSurface", max::UniformType::Sampler);
+		s_gbufferDepth = max::createUniform("s_gbufferDepth", max::UniformType::Sampler);
+	}
+
+	void destroy()
+	{
+		max::destroy(s_materialDiffuse);
+		max::destroy(s_materialNormal);
+		max::destroy(s_materialRoughness);
+		max::destroy(s_materialMetallic);
+		max::destroy(s_cubeDiffuse);
+		max::destroy(s_cubeNormal);
+		max::destroy(s_cubePosition);
+		max::destroy(s_cubeDepth);
+		max::destroy(s_atlasDiffuse);
+		max::destroy(s_atlasNormal);
+		max::destroy(s_atlasPosition);
+		max::destroy(s_atlasDepth);
+		max::destroy(s_atlasRadiance);
+		max::destroy(s_atlasIrradiance);
+		max::destroy(s_gbufferDiffuse);
+		max::destroy(s_gbufferNormal);
+		max::destroy(s_gbufferSurface);
+		max::destroy(s_gbufferDepth);
+	}
+
+
+	max::UniformHandle s_materialDiffuse;
+	max::UniformHandle s_materialNormal;
+	max::UniformHandle s_materialRoughness;
+	max::UniformHandle s_materialMetallic;
+	max::UniformHandle s_cubeDiffuse;
+	max::UniformHandle s_cubeNormal;
+	max::UniformHandle s_cubePosition;
+	max::UniformHandle s_cubeDepth;
+	max::UniformHandle s_atlasDiffuse;
+	max::UniformHandle s_atlasNormal;
+	max::UniformHandle s_atlasPosition;
+	max::UniformHandle s_atlasDepth;
+	max::UniformHandle s_atlasRadiance;
+	max::UniformHandle s_atlasIrradiance;
+	max::UniformHandle s_gbufferDiffuse;
+	max::UniformHandle s_gbufferNormal;
+	max::UniformHandle s_gbufferSurface;
+	max::UniformHandle s_gbufferDepth;
 };
 
 /// Create default texture with given color.
@@ -193,45 +301,38 @@ static max::TextureHandle createDefaultTexture(const uint8_t _r, const uint8_t _
 /// 
 struct Material
 {
-	void create()
+	void create(Samplers* _samplers, Uniforms* _uniforms)
 	{
+		m_samplers = _samplers;
+		m_uniforms = _uniforms;
+
 		m_whiteTexture = createDefaultTexture(255, 255, 255, 255);
 		m_normalTexture = createDefaultTexture(128, 128, 255, 255);
-
-		s_texDiffuse = max::createUniform("s_texDiffuse", max::UniformType::Sampler);
-		s_texNormal = max::createUniform("s_texNormal", max::UniformType::Sampler);
-		s_texRoughness = max::createUniform("s_texRoughness", max::UniformType::Sampler);
-		s_texMetallic = max::createUniform("s_texMetallic", max::UniformType::Sampler);
 	}
 
 	void destroy()
 	{
-		max::destroy(s_texMetallic);
-		max::destroy(s_texRoughness);
-		max::destroy(s_texNormal);
-		max::destroy(s_texDiffuse);
-
 		max::destroy(m_normalTexture);
 		max::destroy(m_whiteTexture);
 	}
 
-	void submitPerDraw(Uniforms* _uniforms)
+	void submitPerDraw()
 	{
-		max::setTexture(0, s_texDiffuse, m_texDiffuse);
-		_uniforms->m_texDiffuseFactor[0] = m_factorDiffuse[0];
-		_uniforms->m_texDiffuseFactor[1] = m_factorDiffuse[1];
-		_uniforms->m_texDiffuseFactor[2] = m_factorDiffuse[2];
+		max::setTexture(0, m_samplers->s_materialDiffuse, m_texDiffuse);
+		m_uniforms->m_texDiffuseFactor[0] = m_factorDiffuse[0];
+		m_uniforms->m_texDiffuseFactor[1] = m_factorDiffuse[1];
+		m_uniforms->m_texDiffuseFactor[2] = m_factorDiffuse[2];
 
-		max::setTexture(1, s_texNormal, m_texNormal);
-		_uniforms->m_texNormalFactor[0] = m_factorNormal[0];
-		_uniforms->m_texNormalFactor[1] = m_factorNormal[1];
-		_uniforms->m_texNormalFactor[2] = m_factorNormal[2];
+		max::setTexture(1,m_samplers->s_materialNormal, m_texNormal);
+		m_uniforms->m_texNormalFactor[0] = m_factorNormal[0];
+		m_uniforms->m_texNormalFactor[1] = m_factorNormal[1];
+		m_uniforms->m_texNormalFactor[2] = m_factorNormal[2];
 
-		max::setTexture(2, s_texRoughness, m_texRoughness);
-		_uniforms->m_texRoughnessFactor = m_factorRoughness;
+		max::setTexture(2, m_samplers->s_materialRoughness, m_texRoughness);
+		m_uniforms->m_texRoughnessFactor = m_factorRoughness;
 
-		max::setTexture(3, s_texMetallic, m_texMetallic);
-		_uniforms->m_texMetallicFactor = m_factorMetallic;
+		max::setTexture(3, m_samplers->s_materialMetallic, m_texMetallic);
+		m_uniforms->m_texMetallicFactor = m_factorMetallic;
 	}
 
 	void setDiffuse(max::TextureHandle _texture, float _r, float _g, float _b)
@@ -296,10 +397,8 @@ struct Material
 		m_factorMetallic = _r;
 	}
 
-	max::UniformHandle s_texDiffuse;
-	max::UniformHandle s_texNormal;
-	max::UniformHandle s_texRoughness;
-	max::UniformHandle s_texMetallic;
+	Samplers* m_samplers;
+	Uniforms* m_uniforms;
 
 	max::TextureHandle m_texDiffuse;
 	max::TextureHandle m_texNormal;
@@ -389,7 +488,13 @@ struct CommonResources
 	float m_view[16];
 	float m_proj[16];
 
+	float m_viewDir[3];
+
+	float m_sunDir[3];
+	float m_sunCol[3];
+
 	Uniforms* m_uniforms;
+	Samplers* m_samplers;
 	Material* m_material;
 	Probes* m_probes;
 
@@ -411,8 +516,74 @@ static const RenderSettings::Rect getScaledResolution(CommonResources* _common)
 	}
 }
 
-// @todo Move this.
+/// Data used to submit scene geometry for rendering.
+///
+struct RenderData
+{
+	max::ViewId m_view;
+	max::ProgramHandle m_program;
+
+	CommonResources* m_common;
+
+	bool m_material; 
+};
+
 constexpr uint32_t kMaxRenderables = 1000;
+
+/// Submit scene geometry for rendering.
+///
+static void submit(RenderData* _renderData)
+{
+	max::System<TransformComponent, RenderComponent> renderables;
+	renderables.each(kMaxRenderables, [](max::EntityHandle _entity, void* _userData)
+	{
+		RenderData* data = (RenderData*)_userData;
+
+		TransformComponent* tc = max::getComponent<TransformComponent>(_entity);
+		RenderComponent* rc = max::getComponent<RenderComponent>(_entity);
+
+		max::MeshQuery* query = max::queryMesh(rc->m_mesh);
+		for (uint32_t ii = 0; ii < query->m_num; ++ii)
+		{
+			float mtx[16];
+			bx::mtxSRT(mtx,
+				tc->m_scale.x, tc->m_scale.y, tc->m_scale.z,
+				tc->m_rotation.x, tc->m_rotation.y, tc->m_rotation.z, tc->m_rotation.w,
+				tc->m_position.x, tc->m_position.y, tc->m_position.z);
+
+			max::setTransform(mtx);
+
+			max::setVertexBuffer(0, query->m_vertices[ii]);
+			max::setIndexBuffer(query->m_indices[ii]);
+
+			if (data->m_material)
+			{
+				MaterialComponent* mc = max::getComponent<MaterialComponent>(_entity);
+				if (mc != NULL)
+				{
+					data->m_common->m_material->setDiffuse(mc->m_diffuse.m_texture, mc->m_diffuseFactor[0], mc->m_diffuseFactor[1], mc->m_diffuseFactor[2]);
+					data->m_common->m_material->setNormal(mc->m_normal.m_texture, mc->m_normalFactor[0], mc->m_normalFactor[1], mc->m_normalFactor[2]);
+					data->m_common->m_material->setRoughness(mc->m_roughness.m_texture, mc->m_roughnessFactor);
+					data->m_common->m_material->setMetallic(mc->m_metallic.m_texture, mc->m_metallicFactor);
+				}
+
+				data->m_common->m_material->submitPerDraw();
+				data->m_common->m_uniforms->submitPerDraw();
+			}
+
+			max::setState(0
+				| MAX_STATE_WRITE_RGB
+				| MAX_STATE_WRITE_A
+				| MAX_STATE_WRITE_Z
+				| MAX_STATE_DEPTH_TEST_LESS
+				| MAX_STATE_MSAA
+			);
+
+			max::submit(data->m_view, data->m_program);
+		}
+
+	}, _renderData);
+}
 
 /// Shadow Mapping @todo Cascaded shadow mapping when?
 ///
@@ -447,25 +618,13 @@ struct SM
 		}
 
 		// Calculate view.
+		const bx::Vec3 eye = { -m_common->m_sunDir[0], -m_common->m_sunDir[1], -m_common->m_sunDir[2] }; 
+		const bx::Vec3 at = { 0.0f,  0.0f, 0.0f };
 		float view[16];
-
-		max::System<DirectionalLightComponent> dirLights;
-		dirLights.each(1, [](max::EntityHandle _entity, void* _userData)
-		{
-			float* view = (float*)_userData;
-
-			DirectionalLightComponent* dlc = max::getComponent<DirectionalLightComponent>(_entity);
-				
-			const bx::Vec3 eye = bx::mul(dlc->m_direction, -100.0f); // @todo What is 100 here? Does this matter?
-			const bx::Vec3 at = { 0.0f,  0.0f,   0.0f };
-
-			bx::mtxLookAt(view, bx::mul(eye, 100), at);
-
-		}, view);
+		bx::mtxLookAt(view, eye, at); 
 
 		// Calculate proj.
 		const float area = 30.0f; 
-		
 		float proj[16];
 		bx::mtxOrtho(proj, -area, area, -area, area, -100.0f, 100.0f, 0.0f, max::getCaps()->homogeneousDepth);
 
@@ -475,40 +634,11 @@ struct SM
 		max::setViewTransform(m_view, view, proj);
 		max::setViewClear(m_view, MAX_CLEAR_COLOR | MAX_CLEAR_DEPTH, 0x000000ff, 1.0f, 0);
 
-		max::System<TransformComponent, RenderComponent> renderables;
-		renderables.each(kMaxRenderables, [](max::EntityHandle _entity, void* _userData)
-		{
-			SM* sm = (SM*)_userData;
-
-			TransformComponent* tc = max::getComponent<TransformComponent>(_entity);
-			RenderComponent* rc = max::getComponent<RenderComponent>(_entity);
-			
-			max::MeshQuery* query = max::queryMesh(rc->m_mesh);
-			for (uint32_t ii = 0; ii < query->m_num; ++ii)
-			{
-				float mtx[16];
-				bx::mtxSRT(mtx,
-					tc->m_scale.x, tc->m_scale.y, tc->m_scale.z,
-					tc->m_rotation.x, tc->m_rotation.y, tc->m_rotation.z, tc->m_rotation.w,
-					tc->m_position.x, tc->m_position.y, tc->m_position.z);
-
-				max::setTransform(mtx);
-
-				max::setVertexBuffer(0, query->m_vertices[ii]);
-				max::setIndexBuffer(query->m_indices[ii]);
-
-				max::setState(0
-					| MAX_STATE_WRITE_RGB
-					| MAX_STATE_WRITE_A
-					| MAX_STATE_WRITE_Z
-					| MAX_STATE_DEPTH_TEST_LESS
-					| MAX_STATE_MSAA
-				);
-
-				max::submit(sm->m_view, sm->m_program);
-			}
-
-		}, this);
+		m_renderData.m_view = m_view;
+		m_renderData.m_program = m_program;
+		m_renderData.m_common = m_common;
+		m_renderData.m_material = false;
+		submit(&m_renderData);
 	}
 
 	void createFramebuffer(uint32_t _width, uint32_t _height)
@@ -539,6 +669,8 @@ struct SM
 
 	max::ViewId m_view;
 	CommonResources* m_common;
+
+	RenderData m_renderData;
 
 	max::ProgramHandle m_program;
 	max::FrameBufferHandle m_framebuffer;
@@ -592,52 +724,11 @@ struct GBuffer
 		max::setViewClear(m_view, MAX_CLEAR_COLOR | MAX_CLEAR_DEPTH, 0x000000ff, 1.0f, 0);
 		max::setViewTransform(m_view, m_common->m_view, m_common->m_proj);
 
-		max::System<TransformComponent, RenderComponent> renderables;
-		renderables.each(kMaxRenderables, [](max::EntityHandle _entity, void* _userData)
-		{
-			GBuffer* gbuffer = (GBuffer*)_userData;
-
-			TransformComponent* tc = max::getComponent<TransformComponent>(_entity);
-			RenderComponent* rc = max::getComponent<RenderComponent>(_entity);
-			
-			max::MeshQuery* query = max::queryMesh(rc->m_mesh);
-			for (uint32_t ii = 0; ii < query->m_num; ++ii)
-			{
-				float mtx[16];
-				bx::mtxSRT(mtx,
-					tc->m_scale.x, tc->m_scale.y, tc->m_scale.z,
-					tc->m_rotation.x, tc->m_rotation.y, tc->m_rotation.z, tc->m_rotation.w,
-					tc->m_position.x, tc->m_position.y, tc->m_position.z);
-
-				max::setTransform(mtx);
-
-				max::setVertexBuffer(0, query->m_vertices[ii]);
-				max::setIndexBuffer(query->m_indices[ii]);
-
-				MaterialComponent* mc = max::getComponent<MaterialComponent>(_entity);
-				if (mc != NULL)
-				{
-					gbuffer->m_common->m_material->setDiffuse(mc->m_diffuse.m_texture, mc->m_diffuseFactor[0], mc->m_diffuseFactor[1], mc->m_diffuseFactor[2]);
-					gbuffer->m_common->m_material->setNormal(mc->m_normal.m_texture, mc->m_normalFactor[0], mc->m_normalFactor[1], mc->m_normalFactor[2]);
-					gbuffer->m_common->m_material->setRoughness(mc->m_roughness.m_texture, mc->m_roughnessFactor);
-					gbuffer->m_common->m_material->setMetallic(mc->m_metallic.m_texture, mc->m_metallicFactor);
-				}
-
-				gbuffer->m_common->m_material->submitPerDraw(gbuffer->m_common->m_uniforms);
-				gbuffer->m_common->m_uniforms->submitPerDraw();
-
-				max::setState(0
-					| MAX_STATE_WRITE_RGB
-					| MAX_STATE_WRITE_A
-					| MAX_STATE_WRITE_Z
-					| MAX_STATE_DEPTH_TEST_LESS
-					| MAX_STATE_MSAA
-				);
-
-				max::submit(gbuffer->m_view, gbuffer->m_program);
-			}
-
-		}, this);
+		m_renderData.m_view = m_view;
+		m_renderData.m_program = m_program;
+		m_renderData.m_common = m_common;
+		m_renderData.m_material = true;
+		submit(&m_renderData);
 	}
 
 	void createFramebuffer()
@@ -665,6 +756,8 @@ struct GBuffer
 	max::ViewId m_view;
 	CommonResources* m_common;
 
+	RenderData m_renderData;
+
 	max::ProgramHandle m_program;
 	max::FrameBufferHandle m_framebuffer;
 };
@@ -677,61 +770,53 @@ constexpr uint32_t kOctahedralResolution = 48;
 ///
 struct GI
 {
-	void create(CommonResources* _common, max::ViewId _view)
+	void create(CommonResources* _common, max::ViewId _view0, max::ViewId _view1)
 	{
 		// Create data.
-		m_viewId = _view;
+		m_viewId0 = _view0;
+		m_viewId1 = _view1;
 		m_common = _common;
 
-		// 
+		//
 		m_precomputed = false;
 
-		m_programProbe = max::loadProgram("vs_gbuffer", "fs_gbuffer_cubemap");
-		s_texDiffuse = max::createUniform("s_texDiffuse", max::UniformType::Sampler);
-		s_texNormal = max::createUniform("s_texNormal", max::UniformType::Sampler);
+		const uint32_t atlasWidth = (m_common->m_probes->m_gridSize.x * m_common->m_probes->m_gridSize.z) * kOctahedralResolution;
+		const uint32_t atlasHeight = m_common->m_probes->m_gridSize.y * kOctahedralResolution;
 
-		m_programOctahedral = max::loadProgram("vs_screen", "fs_octahedral");
-		s_diffuse = max::createUniform("s_diffuse", max::UniformType::Sampler);
-		s_normal = max::createUniform("s_normal", max::UniformType::Sampler);
-		s_position = max::createUniform("s_position", max::UniformType::Sampler);
-		s_depth = max::createUniform("s_depth", max::UniformType::Sampler);
+		max::TextureHandle radiance = max::createTexture2D(atlasWidth, atlasHeight, false, 1, max::TextureFormat::RG11B10F, MAX_TEXTURE_RT);
+		m_framebufferRadiance = max::createFrameBuffer(1, &radiance, true);
 
-		// Create 3D textures (atlas) for each channel (diffuse, normals, position)
-		m_atlasWidth = (m_common->m_probes->m_gridSize.x * m_common->m_probes->m_gridSize.z) * kOctahedralResolution;
-		m_atlasHeight = m_common->m_probes->m_gridSize.y * kOctahedralResolution;
-
-		m_diffuseAtlas = max::createTexture2D(m_atlasWidth, m_atlasHeight, false, 1, max::TextureFormat::RGBA8, MAX_TEXTURE_BLIT_DST);
-		m_normalAtlas = max::createTexture2D(m_atlasWidth, m_atlasHeight, false, 1, max::TextureFormat::RG11B10F, MAX_TEXTURE_BLIT_DST);
-		m_positionAtlas = max::createTexture2D(m_atlasWidth, m_atlasHeight, false, 1, max::TextureFormat::RG11B10F, MAX_TEXTURE_BLIT_DST);
-		m_depthAtlas = max::createTexture2D(m_atlasWidth, m_atlasHeight, false, 1, max::TextureFormat::D32F, MAX_TEXTURE_BLIT_DST);
-
-		m_radianceTexture = max::createTexture2D(m_atlasWidth, m_atlasHeight, false, 1, max::TextureFormat::RG11B10F, MAX_TEXTURE_RT);
-		m_radianceFramebuffer = max::createFrameBuffer(1, &m_radianceTexture);
+		max::TextureHandle irradiance = max::createTexture2D(atlasWidth, atlasHeight, false, 1, max::TextureFormat::RG11B10F, MAX_TEXTURE_RT);
+		m_framebufferIrradiance = max::createFrameBuffer(1, &irradiance, true);
 
 		m_programLightDir = max::loadProgram("vs_screen", "fs_light_dir");
+		m_programPrefilter = max::loadProgram("vs_screen", "fs_prefilter");
+
+		//
+		m_diffuseAtlas = max::createTexture2D(atlasWidth, atlasHeight, false, 1, max::TextureFormat::RGBA8, MAX_TEXTURE_BLIT_DST);
+		m_normalAtlas = max::createTexture2D(atlasWidth, atlasHeight, false, 1, max::TextureFormat::RG11B10F, MAX_TEXTURE_BLIT_DST);
+		m_positionAtlas = max::createTexture2D(atlasWidth, atlasHeight, false, 1, max::TextureFormat::RG11B10F, MAX_TEXTURE_BLIT_DST);
+		m_depthAtlas = max::createTexture2D(atlasWidth, atlasHeight, false, 1, max::TextureFormat::R32F, MAX_TEXTURE_BLIT_DST);
+
+		m_programCubemap = max::loadProgram("vs_gbuffer", "fs_gbuffer_cubemap");
+
+		m_programOctahedral = max::loadProgram("vs_screen", "fs_octahedral");
 	}
 
 	void destroy()
 	{
-		max::destroy(m_programLightDir);
-
-		max::destroy(m_radianceFramebuffer);
-		max::destroy(m_radianceTexture);
+		max::destroy(m_programOctahedral);
+		max::destroy(m_programCubemap);
 
 		max::destroy(m_depthAtlas);
 		max::destroy(m_positionAtlas);
 		max::destroy(m_normalAtlas);
 		max::destroy(m_diffuseAtlas);
 
-		max::destroy(s_depth);
-		max::destroy(s_position);
-		max::destroy(s_normal);
-		max::destroy(s_diffuse);
-		max::destroy(m_programOctahedral);
-
-		max::destroy(s_texNormal);
-		max::destroy(s_texDiffuse);
-		max::destroy(m_programProbe);
+		max::destroy(m_programPrefilter);
+		max::destroy(m_programLightDir);
+		max::destroy(m_framebufferIrradiance);
+		max::destroy(m_framebufferRadiance);
 	}
 
 	void render()
@@ -755,65 +840,56 @@ struct GI
 			bx::memCopy(m_common->m_uniforms->m_invViewProj, invViewProj, 16 * sizeof(float));
 		}
 
-		// Checks if probe data is baked if not, bake it.
+		const uint32_t atlasWidth = (m_common->m_probes->m_gridSize.x * m_common->m_probes->m_gridSize.z) * kOctahedralResolution;
+		const uint32_t atlasHeight = m_common->m_probes->m_gridSize.y * kOctahedralResolution;
+
 		if (m_precomputed)
 		{
-			// Directional Light.
+			// Directional Light. (Radiance atlas)
 			float proj[16];
 			bx::mtxOrtho(proj, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 100.0f, 0.0f, max::getCaps()->homogeneousDepth);
 
-			max::setViewFrameBuffer(m_viewId, m_radianceFramebuffer);
-			max::setViewRect(m_viewId, 0, 0, m_atlasWidth, m_atlasHeight);
-			max::setViewTransform(m_viewId, NULL, proj);
+			max::setViewFrameBuffer(m_viewId0, m_framebufferRadiance);
+			max::setViewRect(m_viewId0, 0, 0, atlasWidth, atlasHeight);
+			max::setViewTransform(m_viewId0, NULL, proj);
 
-			// Position not needed for dir light
-			max::setTexture(3, s_diffuse, m_diffuseAtlas);
-			max::setTexture(4, s_normal, m_normalAtlas);
-			max::setTexture(5, s_position, m_positionAtlas);
+			m_common->m_uniforms->m_lightDir[0] = m_common->m_sunDir[0];
+			m_common->m_uniforms->m_lightDir[1] = m_common->m_sunDir[1];
+			m_common->m_uniforms->m_lightDir[2] = m_common->m_sunDir[2];
+			m_common->m_uniforms->m_lightCol[0] = m_common->m_sunCol[0];
+			m_common->m_uniforms->m_lightCol[1] = m_common->m_sunCol[1];
+			m_common->m_uniforms->m_lightCol[2] = m_common->m_sunCol[2];
 
+			max::setTexture(0, m_common->m_samplers->s_atlasDiffuse,  m_diffuseAtlas);
+			max::setTexture(1, m_common->m_samplers->s_atlasNormal,   m_normalAtlas);
 			max::setState(0
 				| MAX_STATE_WRITE_RGB
 				| MAX_STATE_WRITE_A
 				//| MAX_STATE_BLEND_ADD // @todo For multiple lights, but currently ruins output buffer.
 			);
-
 			screenSpaceQuad(max::getCaps()->originBottomLeft);
 
-			max::submit(m_viewId, m_programLightDir);
+			max::submit(m_viewId0, m_programLightDir);
 
-			// Point lights. @todo
-			// for (uint32_t ii = 0; ii < m_numPointLights; ++ii)
-			// {
-			//		max::setTexture(6, s_diffuse,  m_diffuseAtlas);
-			//      max::setTexture(7, s_normal,   m_normalAtlas);
-			//		max::setTexture(8, s_position, m_positionAtlas);
-			// 
-			//		max::submit(m_view, m_programLightPoint);
-			// }
+			// Convolve radiance atlas into SH coefficients irradiance atlas.
+			max::setViewFrameBuffer(m_viewId1, m_framebufferIrradiance);
+			max::setViewRect(m_viewId1, 0, 0, atlasWidth, atlasHeight);
+			max::setViewTransform(m_viewId1, NULL, proj);
+			
+			max::setTexture(0, m_common->m_samplers->s_atlasRadiance, max::getTexture(m_framebufferRadiance));
+			max::setTexture(1, m_common->m_samplers->s_atlasNormal, m_normalAtlas);
+			max::setTexture(2, m_common->m_samplers->s_atlasPosition,  m_positionAtlas);
+			max::setTexture(3, m_common->m_samplers->s_atlasDepth, m_depthAtlas);
+			max::setState(0
+				| MAX_STATE_WRITE_RGB
+				| MAX_STATE_WRITE_A
+			);
+			screenSpaceQuad(max::getCaps()->originBottomLeft);
+
+			max::submit(m_viewId1, m_programPrefilter);
 		}
 		else
 		{
-			// Precompute
-			const bx::Vec3 targets[Faces::Count] =
-			{
-				{ 1.0f,  0.0f,  0.0f },  // +X 
-				{-1.0f,  0.0f,  0.0f },  // -X
-				{ 0.0f,  1.0f,  0.0f },  // +Y
-				{ 0.0f, -1.0f,  0.0f },  // -Y
-				{ 0.0f,  0.0f,  1.0f },  // +Z
-				{ 0.0f,  0.0f, -1.0f },  // -Z
-			};
-
-			const bx::Vec3 ups[Faces::Count] =
-			{
-				{ 0.0f,  1.0f,  0.0f },  // +X
-				{ 0.0f,  1.0f,  0.0f },  // -X
-				{ 0.0f,  0.0f, -1.0f },  // +Y
-				{ 0.0f,  0.0f,  1.0f },  // -Y
-				{ 0.0f,  1.0f,  0.0f },  // +Z
-				{ 0.0f,  1.0f,  0.0f },  // -Z
-			};
-
 			for (uint32_t ii = 0; ii < m_common->m_probes->m_num; ++ii)
 			{
 				// Create gbuffer cubemap rendertarget.
@@ -831,7 +907,7 @@ struct GI
 					at[1].init(normalCube, max::Access::Write, uint16_t(jj));
 					at[2].init(positionCube, max::Access::Write, uint16_t(jj));
 					at[3].init(depthCube, max::Access::Write, uint16_t(jj));
-					cubeFramebuffers[jj] = max::createFrameBuffer(BX_COUNTOF(at), at);
+					cubeFramebuffers[jj] = max::createFrameBuffer(BX_COUNTOF(at), at, true);
 				}
 
 				// Submit render all sides of cubemap.
@@ -839,7 +915,7 @@ struct GI
 				for (uint8_t jj = 0; jj < Faces::Count; ++jj)
 				{
 					float view[16];
-					bx::mtxLookAt(view, m_common->m_probes->m_probes[ii].m_pos, bx::add(m_common->m_probes->m_probes[ii].m_pos, targets[jj]), ups[jj]);
+					bx::mtxLookAt(view, m_common->m_probes->m_probes[ii].m_pos, bx::add(m_common->m_probes->m_probes[ii].m_pos, s_targets[jj]), s_ups[jj]);
 
 					float proj[16];
 					bx::mtxProj(proj, 90.0f, 1.0f, 0.001f, 1000.0f, max::getCaps()->homogeneousDepth);
@@ -849,54 +925,11 @@ struct GI
 					max::setViewRect(m_viewIdOffline, 0, 0, kCubemapResolution, kCubemapResolution);
 					max::setViewClear(m_viewIdOffline, MAX_CLEAR_COLOR | MAX_CLEAR_DEPTH, 0x000000ff, 1.0f, 0);
 
-					max::System<TransformComponent> system;
-					system.each(kMaxRenderables, [](max::EntityHandle _entity, void* _userData)
-						{
-							GI* gi = (GI*)_userData;
-
-							TransformComponent* tc = max::getComponent<TransformComponent>(_entity);
-
-							RenderComponent* rc = max::getComponent<RenderComponent>(_entity);
-							if (rc != NULL)
-							{
-								max::MeshQuery* query = max::queryMesh(rc->m_mesh);
-								for (uint32_t ii = 0; ii < query->m_num; ++ii)
-								{
-									float mtx[16];
-									bx::mtxSRT(mtx,
-										tc->m_scale.x, tc->m_scale.y, tc->m_scale.z,
-										tc->m_rotation.x, tc->m_rotation.y, tc->m_rotation.z, tc->m_rotation.w,
-										tc->m_position.x, tc->m_position.y, tc->m_position.z);
-
-									max::setTransform(mtx);
-
-									max::setVertexBuffer(0, query->m_vertices[ii]);
-									max::setIndexBuffer(query->m_indices[ii]);
-
-									MaterialComponent* mc = max::getComponent<MaterialComponent>(_entity);
-									if (mc != NULL)
-									{
-										gi->m_common->m_material->setDiffuse(mc->m_diffuse.m_texture, mc->m_diffuseFactor[0], mc->m_diffuseFactor[1], mc->m_diffuseFactor[2]);
-										gi->m_common->m_material->setNormal(mc->m_normal.m_texture, mc->m_normalFactor[0], mc->m_normalFactor[1], mc->m_normalFactor[2]);
-										gi->m_common->m_material->setRoughness(mc->m_roughness.m_texture, mc->m_roughnessFactor);
-										gi->m_common->m_material->setMetallic(mc->m_metallic.m_texture, mc->m_metallicFactor);
-									}
-
-									gi->m_common->m_material->submitPerDraw(gi->m_common->m_uniforms);
-									gi->m_common->m_uniforms->submitPerDraw();
-
-									max::setState(0
-										| MAX_STATE_WRITE_RGB
-										| MAX_STATE_WRITE_A
-										| MAX_STATE_WRITE_Z
-										| MAX_STATE_DEPTH_TEST_LESS
-										| MAX_STATE_MSAA
-									);
-
-									max::submit(gi->m_viewIdOffline, gi->m_programProbe);
-								}
-							}
-						}, this);
+					m_renderData.m_view = m_viewIdOffline;
+					m_renderData.m_program = m_programCubemap;
+					m_renderData.m_common = m_common;
+					m_renderData.m_material = true;
+					submit(&m_renderData);
 
 					++m_viewIdOffline;
 				}
@@ -905,14 +938,14 @@ struct GI
 				max::TextureHandle diffuseOct = max::createTexture2D(kOctahedralResolution, kOctahedralResolution, false, 1, max::TextureFormat::RGBA8, MAX_TEXTURE_RT);
 				max::TextureHandle normalOct = max::createTexture2D(kOctahedralResolution, kOctahedralResolution, false, 1, max::TextureFormat::RG11B10F, MAX_TEXTURE_RT);
 				max::TextureHandle positionOct = max::createTexture2D(kOctahedralResolution, kOctahedralResolution, false, 1, max::TextureFormat::RG11B10F, MAX_TEXTURE_RT);
-				max::TextureHandle depthOct = max::createTexture2D(kOctahedralResolution, kOctahedralResolution, false, 1, max::TextureFormat::D32F, MAX_TEXTURE_RT);
+				max::TextureHandle depthOct = max::createTexture2D(kOctahedralResolution, kOctahedralResolution, false, 1, max::TextureFormat::R32F, MAX_TEXTURE_RT);
 
 				max::Attachment at[4];
 				at[0].init(diffuseOct, max::Access::Write);
 				at[1].init(normalOct, max::Access::Write);
 				at[2].init(positionOct, max::Access::Write);
 				at[3].init(depthOct, max::Access::Write);
-				max::FrameBufferHandle octFramebuffer = max::createFrameBuffer(BX_COUNTOF(at), at);
+				max::FrameBufferHandle octFramebuffer = max::createFrameBuffer(BX_COUNTOF(at), at, true);
 
 				float proj[16];
 				bx::mtxOrtho(proj, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 100.0f, 0.0f, max::getCaps()->homogeneousDepth);
@@ -921,10 +954,10 @@ struct GI
 				max::setViewRect(m_viewIdOffline, 0, 0, kOctahedralResolution, kOctahedralResolution);
 				max::setViewTransform(m_viewIdOffline, NULL, proj);
 
-				max::setTexture(0, s_diffuse, diffuseCube);
-				max::setTexture(1, s_normal, normalCube);
-				max::setTexture(2, s_position, positionCube);
-				max::setTexture(3, s_depth, depthCube);
+				max::setTexture(0, m_common->m_samplers->s_cubeDiffuse,  diffuseCube);
+				max::setTexture(1, m_common->m_samplers->s_cubeNormal,   normalCube);
+				max::setTexture(2, m_common->m_samplers->s_cubePosition, positionCube);
+				max::setTexture(3, m_common->m_samplers->s_cubeDepth,    depthCube);
 
 				max::setState(0 | MAX_STATE_WRITE_RGB | MAX_STATE_WRITE_A);
 
@@ -954,50 +987,37 @@ struct GI
 				{
 					max::destroy(cubeFramebuffers[jj]);
 				}
-				max::destroy(depthCube);
-				max::destroy(positionCube);
-				max::destroy(normalCube);
-				max::destroy(diffuseCube);
 
 				max::destroy(octFramebuffer);
-				max::destroy(positionOct);
-				max::destroy(normalOct);
-				max::destroy(diffuseOct);
 			}
 
 			m_precomputed = true;
 		}
 	}
 
-	max::ViewId m_viewId;
+	max::ViewId m_viewId0;
+	max::ViewId m_viewId1;
 	CommonResources* m_common;
+	
+	RenderData m_renderData;
+	
+	max::FrameBufferHandle m_framebufferRadiance;   //!< Radiance atlas framebuffer
+	max::FrameBufferHandle m_framebufferIrradiance; //!< Irradiance atlas framebuffer
+	max::ProgramHandle m_programLightDir;			//!< Program for directional light radiance
+	max::ProgramHandle m_programPrefilter;			//!< Program for prefilter SH irradiance
 
-	bool m_precomputed;
+	// Precomputed
+	bool m_precomputed; //!< Are all probes precomputed.
+	
+	max::TextureHandle m_diffuseAtlas;  //!< Atlas texture for diffuse gbuffer data
+	max::TextureHandle m_normalAtlas;   //!< Atlas texture for normal gbuffer data
+	max::TextureHandle m_positionAtlas; //!< Atlas texture for position gbuffer data
+	max::TextureHandle m_depthAtlas;    //!< Atlas texture for depth gbuffer data
+	
+	max::ProgramHandle m_programCubemap;    //!< Program thats used to render scene objects to gbuffer cubemaps
+	max::ProgramHandle m_programOctahedral; //!< Program thats used to convert cubemap to octahedral
 
-	max::ProgramHandle m_programProbe; //!< Program thats used to render scene objects to light probe cubemaps.
-	max::UniformHandle s_texDiffuse; //!< Diffuse uniform
-	max::UniformHandle s_texNormal;  //!< Normal uniform
-
-	max::ProgramHandle m_programOctahedral; //!< Program thats used to convert cubemap to octahedral.
-	max::UniformHandle s_diffuse; //!< Diffuse uniform
-	max::UniformHandle s_normal; //!< Normal uniform
-	max::UniformHandle s_position; //!< Position uniform
-	max::UniformHandle s_depth; //!< Depth uniform
-
-	max::ViewId m_viewIdOffline;
-
-	uint32_t m_atlasWidth;
-	uint32_t m_atlasHeight;
-
-	max::TextureHandle m_diffuseAtlas;
-	max::TextureHandle m_normalAtlas;
-	max::TextureHandle m_positionAtlas;
-	max::TextureHandle m_depthAtlas;
-
-	max::TextureHandle m_radianceTexture;
-	max::FrameBufferHandle m_radianceFramebuffer;
-
-	max::ProgramHandle m_programLightDir;
+	max::ViewId m_viewIdOffline; //!< ViewID used for precomputing probe gbuffer data.
 };
 
 /// Accumulation.
@@ -1019,12 +1039,6 @@ struct Accumulation
 
 		//
 		m_program = max::loadProgram("vs_screen", "fs_accumulation");
-		s_surface		  = max::createUniform("s_surface",			max::UniformType::Sampler);
-		s_normal		  = max::createUniform("s_normal",			max::UniformType::Sampler);
-		s_depth			  = max::createUniform("s_depth",	        max::UniformType::Sampler);
-		s_radianceAtlas   = max::createUniform("s_radianceAtlas",   max::UniformType::Sampler);
-		s_irradianceAtlas = max::createUniform("s_irradianceAtlas", max::UniformType::Sampler);
-		s_depthAtlas	  = max::createUniform("s_depthAtlas",		max::UniformType::Sampler);
 
 		// Don't create framebuffers and textures until first render call.
 		m_framebuffer.idx = max::kInvalidHandle;
@@ -1032,12 +1046,6 @@ struct Accumulation
 
 	void destroy()
 	{
-		max::destroy(s_depthAtlas);
-		max::destroy(s_irradianceAtlas);
-		max::destroy(s_radianceAtlas);
-		max::destroy(s_depth);
-		max::destroy(s_normal);
-		max::destroy(s_surface);
 		max::destroy(m_program);
 
 		destroyFramebuffer();
@@ -1059,28 +1067,18 @@ struct Accumulation
 		max::setViewRect(m_view, 0, 0, m_common->m_settings->m_viewport.m_width, m_common->m_settings->m_viewport.m_height);
 		max::setViewTransform(m_view, NULL, proj);
 
-		max::setTexture(0, s_surface, max::getTexture(_gbuffer->m_framebuffer, GBuffer::TextureType::Surface));
-		max::setTexture(1, s_normal, max::getTexture(_gbuffer->m_framebuffer, GBuffer::TextureType::Normal));
-		max::setTexture(2, s_depth, max::getTexture(_gbuffer->m_framebuffer, GBuffer::TextureType::Depth));
-		max::setTexture(3, s_radianceAtlas, _gi->m_diffuseAtlas);
-		max::setTexture(4, s_irradianceAtlas, _gi->m_diffuseAtlas);
-		max::setTexture(5, s_depthAtlas, _gi->m_diffuseAtlas);
+		max::setTexture(0, m_common->m_samplers->s_gbufferNormal, max::getTexture(_gbuffer->m_framebuffer, GBuffer::TextureType::Normal));
+		max::setTexture(1, m_common->m_samplers->s_gbufferSurface, max::getTexture(_gbuffer->m_framebuffer, GBuffer::TextureType::Surface));
+		max::setTexture(2, m_common->m_samplers->s_gbufferDepth, max::getTexture(_gbuffer->m_framebuffer, GBuffer::TextureType::Depth));
+		max::setTexture(3, m_common->m_samplers->s_atlasIrradiance, max::getTexture(_gi->m_framebufferIrradiance));
 
 		max::setState(0
 			| MAX_STATE_WRITE_RGB
 			| MAX_STATE_WRITE_A
-			//| MAX_STATE_BLEND_ADD // @todo For multiple lights, but currently ruins output buffers.
 		);
 		screenSpaceQuad(max::getCaps()->originBottomLeft);
 
-		// Directional light.
 		max::submit(m_view, m_program);
-
-		// Point lights. @todo
-		// for (uint32_t ii = 0; ii < m_numPointLights; ++ii)
-		// {
-		//		max::submit(m_view, m_lightPointProgram);
-		// }
 	}
 
 	void createFramebuffer()
@@ -1108,13 +1106,6 @@ struct Accumulation
 
 	max::ProgramHandle m_program;
 	max::FrameBufferHandle m_framebuffer;
-
-	max::UniformHandle s_surface;
-	max::UniformHandle s_normal;
-	max::UniformHandle s_depth;
-	max::UniformHandle s_radianceAtlas;
-	max::UniformHandle s_irradianceAtlas;
-	max::UniformHandle s_depthAtlas;
 };
 
 /// Combine.
@@ -1128,12 +1119,10 @@ struct Combine
 
 		//
 		m_program = max::loadProgram("vs_screen", "fs_combine");
-		s_buffer = max::createUniform("s_buffer", max::UniformType::Sampler);
 	}
 
 	void destroy()
 	{
-		max::destroy(s_buffer);
 		max::destroy(m_program);
 	}
 
@@ -1149,19 +1138,19 @@ struct Combine
 
 		if (m_common->m_settings->m_debugbuffer == RenderSettings::None)
 		{
-			max::setTexture(0, s_buffer, max::getTexture(_gbuffer->m_framebuffer, 0));
+			max::setTexture(0, m_common->m_samplers->s_gbufferDiffuse, max::getTexture(_gbuffer->m_framebuffer, 0));
 		}
 		else if (m_common->m_settings->m_debugbuffer <= RenderSettings::DebugBuffer::Depth)
 		{
-			max::setTexture(0, s_buffer, max::getTexture(_gbuffer->m_framebuffer, (uint8_t)m_common->m_settings->m_debugbuffer - 1));
+			max::setTexture(0, m_common->m_samplers->s_gbufferDiffuse, max::getTexture(_gbuffer->m_framebuffer, (uint8_t)m_common->m_settings->m_debugbuffer - 1));
 		}
 		else  if (m_common->m_settings->m_debugbuffer <= RenderSettings::DebugBuffer::Irradiance)
 		{
-			max::setTexture(0, s_buffer, max::getTexture(_acc->m_framebuffer, 0));
+			max::setTexture(0, m_common->m_samplers->s_gbufferDiffuse, max::getTexture(_acc->m_framebuffer, 0));
 		}
 		else  if (m_common->m_settings->m_debugbuffer <= RenderSettings::DebugBuffer::Specular)
 		{
-			max::setTexture(0, s_buffer, max::getTexture(_acc->m_framebuffer, 1));
+			max::setTexture(0, m_common->m_samplers->s_gbufferDiffuse, max::getTexture(_acc->m_framebuffer, 1));
 		}
 
 		max::setState(0
@@ -1178,14 +1167,199 @@ struct Combine
 	CommonResources* m_common;
 
 	max::ProgramHandle m_program;
-	max::UniformHandle s_buffer;
 };
 
 /// Forward pass.
 /// 
 struct Forward
 {
+	enum TextureType
+	{
+		Render, //!< .rgb = Rendered.
+		Depth,  //!< .r = Depth
 
+		Count
+	};
+
+	void create(CommonResources* _common, max::ViewId _view)
+	{
+		m_view = _view;
+		m_common = _common;
+
+		//
+		m_meshProbe = max::loadMesh("meshes/sphere.bin");
+		m_programProbe = max::loadProgram("vs_probe", "fs_probe");
+	}
+
+	void destroy()
+	{
+		max::destroy(m_programProbe);
+		max::destroy(m_meshProbe);
+	}
+
+	void render(GBuffer* _gbuffer, GI* _gi)
+	{
+		max::setViewFrameBuffer(m_view, MAX_INVALID_HANDLE);
+		max::setViewRect(m_view, 0, 0, m_common->m_settings->m_viewport.m_width, m_common->m_settings->m_viewport.m_height);
+		max::setViewTransform(m_view, m_common->m_view, m_common->m_proj);
+
+		// Debug GI probes.
+		max::MeshQuery* probeQuery = max::queryMesh(m_meshProbe);
+		if (probeQuery->m_num > 0 && m_common->m_settings->m_debugProbes)
+		{
+			for (uint32_t ii = 0; ii < m_common->m_probes->m_num; ++ii)
+			{
+				Probes::Probe& probe = m_common->m_probes->m_probes[ii];
+
+				float mtx[16];
+				bx::mtxSRT(mtx, 
+					0.25f, 0.25f, 0.25f,
+					0.0f, 0.0f, 0.0f, 
+					probe.m_pos.x, probe.m_pos.y, probe.m_pos.z
+				);
+				max::setTransform(mtx);
+
+				max::setVertexBuffer(0, probeQuery->m_vertices[0]);
+				max::setIndexBuffer(probeQuery->m_indices[0]);
+
+				m_common->m_uniforms->m_probeGridPos[0] = probe.m_gridPos.x;
+				m_common->m_uniforms->m_probeGridPos[1] = probe.m_gridPos.y;
+				m_common->m_uniforms->m_probeGridPos[2] = probe.m_gridPos.z;
+				m_common->m_uniforms->submitPerDraw();
+
+				max::setTexture(0, m_common->m_samplers->s_atlasIrradiance, max::getTexture(_gi->m_framebufferIrradiance));
+				max::setTexture(1, m_common->m_samplers->s_gbufferDepth, max::getTexture(_gbuffer->m_framebuffer, GBuffer::Depth));
+				max::setState(0
+					| MAX_STATE_WRITE_RGB
+					| MAX_STATE_WRITE_A
+					| MAX_STATE_WRITE_Z
+					| MAX_STATE_DEPTH_TEST_LESS
+					| MAX_STATE_MSAA
+				);
+
+				max::submit(m_view, m_programProbe);
+			}
+			
+		}
+	}
+
+	max::ViewId m_view;
+	CommonResources* m_common;
+
+	max::MeshHandle m_meshProbe;
+	max::ProgramHandle m_programProbe;
+};
+
+/// Skybox.
+/// 
+/// 
+/*
+struct Skybox
+{
+	void create(CommonResources* _common, max::ViewId _view)
+	{
+		m_view = _view;
+		m_common = _common;
+
+		//
+		m_program = max::loadProgram("vs_skybox", "fs_skybox");
+	}
+
+	void destroy()
+	{
+		max::destroy(m_program);
+	}
+
+	void render(GBuffer* _gbuffer)
+	{
+		float proj[16];
+		bx::mtxOrtho(proj, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 100.0f, 0.0f, max::getCaps()->homogeneousDepth);
+
+		max::setViewFrameBuffer(m_view, MAX_INVALID_HANDLE);
+		max::setViewRect(m_view, 0, 0, m_common->m_settings->m_viewport.m_width, m_common->m_settings->m_viewport.m_height);
+		max::setViewTransform(m_view, NULL, proj);
+
+		bx::Vec3 toTargetNorm = { -m_common->m_viewDir[0], m_common->m_viewDir[1], m_common->m_viewDir[2] };
+		const bx::Vec3 right = bx::normalize(bx::cross({ 0.0f, 1.0f, 0.0f }, toTargetNorm));
+		const bx::Vec3 up = bx::normalize(bx::cross(toTargetNorm, right));
+		m_common->m_uniforms->m_cameraMtx[0]  = right.x;
+		m_common->m_uniforms->m_cameraMtx[1]  = right.y;
+		m_common->m_uniforms->m_cameraMtx[2]  = right.z;
+		m_common->m_uniforms->m_cameraMtx[3]  = 0.0f;
+		m_common->m_uniforms->m_cameraMtx[4]  = up.x;
+		m_common->m_uniforms->m_cameraMtx[5]  = up.y;
+		m_common->m_uniforms->m_cameraMtx[6]  = up.z;
+		m_common->m_uniforms->m_cameraMtx[7]  = 0.0f;
+		m_common->m_uniforms->m_cameraMtx[8]  = toTargetNorm.x;
+		m_common->m_uniforms->m_cameraMtx[9]  = toTargetNorm.y;
+		m_common->m_uniforms->m_cameraMtx[10] = toTargetNorm.z;
+		m_common->m_uniforms->m_cameraMtx[11] = 0.0f;
+		m_common->m_uniforms->m_cameraMtx[12] = 0.0f;
+		m_common->m_uniforms->m_cameraMtx[13] = 0.0f;
+		m_common->m_uniforms->m_cameraMtx[14] = 0.0f;
+		m_common->m_uniforms->m_cameraMtx[15] = 1.0f;
+
+		max::setTexture(0, m_common->m_samplers->s_skybox, m_common->m_skybox);
+		max::setTexture(1, m_common->m_samplers->s_gbufferDepth, max::getTexture(_gbuffer->m_framebuffer, GBuffer::Depth));
+		max::setState(0
+			| MAX_STATE_WRITE_RGB
+			| MAX_STATE_DEPTH_TEST_LESS
+		);
+
+		screenSpaceQuad(max::getCaps()->originBottomLeft);
+
+		max::submit(m_view, m_program);
+	}
+
+	max::ViewId m_view;
+	CommonResources* m_common;
+
+	max::ProgramHandle m_program;
+};
+*/
+
+/// Perez Sky.
+/// 
+struct Sky
+{
+	void create(CommonResources* _common, max::ViewId _view)
+	{
+		m_view = _view;
+		m_common = _common;
+
+		//
+		m_program = max::loadProgram("vs_sky", "fs_sky");
+	}
+
+	void destroy()
+	{
+		max::destroy(m_program);
+	}
+
+	void render(GBuffer* _gbuffer)
+	{
+		float proj[16];
+		bx::mtxOrtho(proj, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 100.0f, 0.0f, max::getCaps()->homogeneousDepth);
+
+		max::setViewFrameBuffer(m_view, MAX_INVALID_HANDLE);
+		max::setViewRect(m_view, 0, 0, m_common->m_settings->m_viewport.m_width, m_common->m_settings->m_viewport.m_height);
+		max::setViewTransform(m_view, NULL, proj);
+
+		max::setTexture(0, m_common->m_samplers->s_gbufferDepth, max::getTexture(_gbuffer->m_framebuffer, GBuffer::Depth));
+		max::setState(0
+			| MAX_STATE_WRITE_RGB
+			| MAX_STATE_DEPTH_TEST_LESS
+		);
+
+		screenSpaceQuad(max::getCaps()->originBottomLeft);
+
+		max::submit(m_view, m_program);
+	}
+
+	max::ViewId m_view;
+	CommonResources* m_common;
+
+	max::ProgramHandle m_program;
 };
 
 /// Render system.
@@ -1199,14 +1373,16 @@ struct RenderSystem
 
 		// Create uniforms params.
 		m_uniforms.create();
-		m_material.create();
+		m_samplers.create();
+		m_material.create(&m_samplers, &m_uniforms);
 		m_probes.create({ -4.5f, 0.5f, -4.5f }, 3, 3, 3, 4.5f);
 
 		// Set common resources.
-		m_common.m_settings = _settings;
-		m_common.m_uniforms = &m_uniforms;
-		m_common.m_material = &m_material;
-		m_common.m_probes = &m_probes;
+		m_common.m_settings   = _settings;
+		m_common.m_uniforms   = &m_uniforms;
+		m_common.m_samplers   = &m_samplers;
+		m_common.m_material   = &m_material;
+		m_common.m_probes     = &m_probes;
 		m_common.m_firstFrame = true;
 
 		// Create all render techniques.
@@ -1216,19 +1392,28 @@ struct RenderSystem
 		m_gbuffer.create(&m_common, 1);
 		max::setViewName(1, "Color Passes [GBuffer/Deferred]");
 
-		m_gi.create(&m_common, 2);
-		max::setViewName(2, "Global Illumination");
+		m_gi.create(&m_common, 2, 3);
+		max::setViewName(2, "Global Illumination #1");
+		max::setViewName(3, "Global Illumination #2");
 
-		m_accumulation.create(&m_common, 3);
-		max::setViewName(3, "Irradiance & Specular Accumulation");
+		m_accumulation.create(&m_common, 4);
+		max::setViewName(4, "Irradiance & Specular Accumulation");
 
-		m_combine.create(&m_common, 4);
-		max::setViewName(4, "Combine");
+		m_combine.create(&m_common, 5);
+		max::setViewName(5, "Combine");
+
+		m_sky.create(&m_common, 6);
+		max::setViewName(6, "Perez Sky");
+
+		m_forward.create(&m_common, 7);
+		max::setViewName(7, "Forward");
 	}
 
 	void destroy()
 	{
 		// Destroy all render techniques.
+		m_forward.destroy();
+		m_sky.destroy();
 		m_combine.destroy();
 		m_accumulation.destroy();
 		m_gbuffer.destroy();
@@ -1238,6 +1423,7 @@ struct RenderSystem
 		// Destroy uniforms params.
 		m_probes.destroy();
 		m_material.destroy();
+		m_samplers.destroy();
 		m_uniforms.destroy();
 	}
 
@@ -1254,11 +1440,27 @@ struct RenderSystem
 			{
 				bx::memCopy(system->m_common.m_view, cc->m_view, sizeof(float) * 16);
 				bx::memCopy(system->m_common.m_proj, cc->m_proj, sizeof(float) * 16);
+				bx::memCopy(system->m_common.m_viewDir, &cc->m_direction.x, sizeof(float) * 3);
 			}
 
 		}, this);
+
+		max::System<SkyComponent> sun;
+		sun.each(1, [](max::EntityHandle _entity, void* _userData)
+		{
+			RenderSystem* system = (RenderSystem*)_userData;
+
+			SkyComponent* sc = max::getComponent<SkyComponent>(_entity);
+			system->m_common.m_sunDir[0] = sc->m_direction.x;
+			system->m_common.m_sunDir[1] = sc->m_direction.y;
+			system->m_common.m_sunDir[2] = sc->m_direction.z;
+			system->m_common.m_sunCol[0] = sc->m_color.x;
+			system->m_common.m_sunCol[1] = sc->m_color.y;
+			system->m_common.m_sunCol[2] = sc->m_color.z;
+
+		}, this);
 		
-		// Uniforms. @todo EWWWWWW, you fucking disgusting lil gnome
+		// Uniforms. @todo EWWWWWW, you fucking disgusting lil gnome. You know what to do.
 		m_uniforms.m_volumeSpacing = m_probes.m_spacing;
 
 		const bx::Vec3 min = m_probes.m_position;
@@ -1276,6 +1478,10 @@ struct RenderSystem
 		m_uniforms.m_volumeSize[1] = size.y;
 		m_uniforms.m_volumeSize[2] = size.z;
 
+		const RenderSettings::Rect rect = getScaledResolution(&m_common);
+		m_uniforms.m_width = rect.m_width;
+		m_uniforms.m_height = rect.m_height;
+
 		// Submit all uniforms params.
 		m_uniforms.submitPerFrame();
 
@@ -1285,6 +1491,8 @@ struct RenderSystem
 		m_gi.render();
 		m_accumulation.render(&m_gbuffer, &m_gi);
 		m_combine.render(&m_gbuffer, &m_accumulation);
+		m_sky.render(&m_gbuffer);
+		m_forward.render(&m_gbuffer, &m_gi);
 
 		// Swap buffers.
 		max::frame();
@@ -1302,6 +1510,7 @@ struct RenderSystem
 	CommonResources m_common;
 
 	Uniforms m_uniforms;
+	Samplers m_samplers;
 	Material m_material;
 	Probes m_probes;
 
@@ -1310,6 +1519,8 @@ struct RenderSystem
 	GI m_gi;
 	Accumulation m_accumulation;
 	Combine m_combine;
+	Sky m_sky;
+	Forward m_forward;
 };
 
 static RenderSystem* s_ctx = NULL;

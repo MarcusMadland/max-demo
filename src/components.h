@@ -2,6 +2,7 @@
 
 #include <max/max.h>
 #include <bx/math.h>
+#include <bx/timer.h>
 
 struct TransformComponent
 {
@@ -52,9 +53,7 @@ struct CameraComponent
 	{}
 
 	uint32_t m_idx;
-
 	uint32_t m_numSplinePoints;
-
 	float m_view[16];
 	float m_proj[16];
 	float m_fov;
@@ -64,8 +63,13 @@ struct CameraComponent
 	bx::Vec3 m_up;
 };
 
-struct DirectionalLightComponent
+struct SkyComponent
 {
+	SkyComponent()
+		: m_direction(0.0, -1.0f, 0.0f)
+		, m_color(1.0f, 1.0f, 1.0f)
+	{}
+
 	bx::Vec3 m_direction;
 	bx::Vec3 m_color;
 };

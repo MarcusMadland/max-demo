@@ -19,11 +19,11 @@ struct CameraSystem
 
 	void update()
 	{
-		max::System<CameraComponent> system;
-		system.each(10, [](max::EntityHandle _entity, void* _userData)
+		max::System<CameraComponent> camera;
+		camera.each(10, [](max::EntityHandle _entity, void* _userData)
 		{
-			CameraSystem* parent = (CameraSystem*)_userData;
-			CameraSettings* settings = parent->m_settings;
+			CameraSystem* system = (CameraSystem*)_userData;
+			CameraSettings* settings = system->m_settings;
 
 			// Update with active camera only.
 			CameraComponent* cc = max::getComponent<CameraComponent>(_entity);
@@ -104,16 +104,6 @@ struct CameraSystem
 			}
 
 		}, this);
-	}
-	
-	bx::Vec3 rotateVectorByQuaternion(const bx::Vec3& _v, const bx::Quaternion& _q) 
-	{
-		bx::Quaternion vecQuat = { _v.x, _v.y, _v.z , 0.0f };
-		bx::Quaternion normalizedQ = bx::normalize(_q);
-		bx::Quaternion qConjugate = bx::invert(normalizedQ);
-		bx::Quaternion temp = bx::mul(_q, vecQuat);
-		bx::Quaternion resultQuat = bx::mul(temp, qConjugate);
-		return bx::Vec3(resultQuat.x, resultQuat.y, resultQuat.z);
 	}
 
 	CameraSettings* m_settings;

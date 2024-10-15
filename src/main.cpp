@@ -8,32 +8,122 @@
 #include "components.h"
 #include "render.h"
 #include "camera.h"
+#include "sky.h"
 
-#ifndef TG_CONFIG_WITH_EDITOR_TOOLS
-#	define TG_CONFIG_WITH_EDITOR_TOOLS 1
-#endif // TG_CONFIG_WITH_EDITOR_TOOLS
+#ifndef TG_CONFIG_WITH_IMGUI
+#	define TG_CONFIG_WITH_IMGUI 1
+#endif // TG_CONFIG_WITH_IMGUI
+
+#ifndef TG_CONFIG_WITH_MAYA
+#	define TG_CONFIG_WITH_MAYA 1
+#endif // TG_CONFIG_WITH_MAYA
 
 static const uint32_t kAppWidth = 1280;
 static const uint32_t kAppHeight = 720;
 
+/// Callback implementation.
+/// 
+struct Callback : public max::CallbackI
+{
+	virtual ~Callback()
+	{
+	}
+
+	virtual void fatal(const char* _filePath, uint16_t _line, max::Fatal::Enum _code, const char* _str) override
+	{
+		BX_UNUSED(_filePath, _line);
+
+		bx::debugPrintf("Fatal error: 0x%08x: %s", _code, _str);
+		abort();
+	}
+
+	virtual void traceVargs(const char* _filePath, uint16_t _line, const char* _format, va_list _argList) override
+	{
+		bx::debugPrintf("%s (%d): ", _filePath, _line);
+		bx::debugPrintfVargs(_format, _argList);
+
+		// Console output
+		char format[1024];
+		vsprintf(format, _format, _argList);
+		printf(format);
+	}
+
+	virtual void profilerBegin(const char* /*_name*/, uint32_t /*_abgr*/, const char* /*_filePath*/, uint16_t /*_line*/) override
+	{
+	}
+
+	virtual void profilerBeginLiteral(const char* /*_name*/, uint32_t /*_abgr*/, const char* /*_filePath*/, uint16_t /*_line*/) override
+	{
+	}
+
+	virtual void profilerEnd() override
+	{
+	}
+
+	virtual uint32_t cacheReadSize(uint64_t _id) override
+	{
+		return 0;
+	}
+
+	virtual bool cacheRead(uint64_t _id, void* _data, uint32_t _size) override
+	{
+		return false;
+	}
+
+	virtual void cacheWrite(uint64_t _id, const void* _data, uint32_t _size) override
+	{
+	}
+
+	virtual void screenShot(const char* _filePath, uint32_t _width, uint32_t _height, uint32_t _pitch, const void* _data, uint32_t /*_size*/, bool _yflip) override
+	{
+	}
+
+	virtual void captureBegin(uint32_t _width, uint32_t _height, uint32_t /*_pitch*/, max::TextureFormat::Enum /*_format*/, bool _yflip) override
+	{
+	}
+
+	virtual void captureEnd() override
+	{
+	}
+
+	virtual void captureFrame(const void* _data, uint32_t /*_size*/) override
+	{
+	}
+};
+
 /// Engine settings.
 ///
-struct EngineSettings
+struct Engine
 {
+	max::MouseState m_mouseState; //!< State of mouse input.
 	uint32_t m_width;  //!< Desired width of the viewport/res/window
 	uint32_t m_height; //!< Desired height of the viewport/res/window
 	uint32_t m_debug;  //!< Debug mode. See `MAX_DEBUG_` flags.
 	uint32_t m_reset;  //!< Reset mode. See `MAX_RESET_` flags.
 };
 
-static bool processEvents(EngineSettings* _settings, Input* _input)
+static bool processEvents(Engine* _engine)
 {
 	return max::processEvents(
-		_settings->m_width,
-		_settings->m_height,
-		_settings->m_debug,
-		_settings->m_reset,
-		&_input->m_mouseState);
+			_engine->m_width,
+			_engine->m_height,
+			_engine->m_debug,
+			_engine->m_reset,
+			&_engine->m_mouseState
+		);
+}
+
+static void imguiBeginFrame(Engine* _engine)
+{
+	imguiBeginFrame(_engine->m_mouseState.m_mx
+		, _engine->m_mouseState.m_my
+		, (_engine->m_mouseState.m_buttons[max::MouseButton::Left] ? IMGUI_MBUT_LEFT : 0)
+		| (_engine->m_mouseState.m_buttons[max::MouseButton::Right] ? IMGUI_MBUT_RIGHT : 0)
+		| (_engine->m_mouseState.m_buttons[max::MouseButton::Middle] ? IMGUI_MBUT_MIDDLE : 0)
+		, _engine->m_mouseState.m_mz
+		, uint16_t(_engine->m_width)
+		, uint16_t(_engine->m_height)
+	);
 }
 
 /// Application implementation with max.
@@ -47,11 +137,15 @@ struct TwilightGuardian : public max::AppI
 		// to fucking recompile the entire game just to change something here when TG_CONFIG_WITH_EDITOR_TOOLS
 		// is false. Will also make it easier for settings menu in the future.
 
-		// Engine settings.
-		m_engineSettings.m_width = kAppWidth;
-		m_engineSettings.m_height = kAppHeight;
-		m_engineSettings.m_debug = MAX_DEBUG_NONE;
-		m_engineSettings.m_reset = MAX_RESET_NONE;
+		// Engine.
+		m_engine.m_width = kAppWidth;
+		m_engine.m_height = kAppHeight;
+		m_engine.m_debug = MAX_DEBUG_NONE;
+		m_engine.m_reset = MAX_RESET_NONE;
+
+		// Sky settings.
+		m_skySettings.m_month = Month::October;
+		m_skySettings.m_speed = 1.0f;
 
 		// Camera settings.
 		m_cameraSettings.m_viewport.m_width = kAppWidth;
@@ -67,14 +161,14 @@ struct TwilightGuardian : public max::AppI
 		m_renderSettings.m_viewport.m_height = kAppWidth;
 		m_renderSettings.m_viewport.m_height = kAppHeight;
 		m_renderSettings.m_activeCameraIdx = 1;
-		m_renderSettings.m_skybox = "textures/bolonga_lod.dds";
 		m_renderSettings.m_debugbuffer = RenderSettings::None;
+		m_renderSettings.m_debugProbes = false;
 		m_renderSettings.m_shadowMap.m_width = 1024;
 		m_renderSettings.m_shadowMap.m_height = 1024;
 
-#if TG_CONFIG_WITH_EDITOR_TOOLS
+#if TG_CONFIG_WITH_MAYA
 		m_mayaBridge = NULL;
-#endif // TG_CONFIG_WITH_EDITOR_TOOLS
+#endif // TG_CONFIG_WITH_MAYA
 	}
 
 	void init(int32_t _argc, const char* const* _argv, uint32_t _width, uint32_t _height) override
@@ -89,38 +183,39 @@ struct TwilightGuardian : public max::AppI
 		init.platformData.ndt  = max::getNativeDisplayHandle();
 		init.resolution.width  = kAppWidth;
 		init.resolution.height = kAppHeight;
-		init.resolution.reset  = m_engineSettings.m_reset;
+		init.resolution.reset  = m_engine.m_reset;
+		init.callback = &m_callback;
 		max::init(init);
 		
 		// Load scenes.
 		m_world.load("scenes/scene.bin");
 		m_entities.load();
 
-		// Enable input.
-		m_input.enable();
-
 		// Create systems.
+		skyCreate(&m_skySettings);
 		cameraCreate(&m_cameraSettings);
 		renderCreate(&m_renderSettings);
+		inputCreate(&m_inputSettings, &m_engine.m_mouseState);
 
-#if TG_CONFIG_WITH_EDITOR_TOOLS
+		// Enable input.
+		inputEnable();
+
+#if TG_CONFIG_WITH_IMGUI
 		imguiCreate();
-#endif // TG_CONFIG_WITH_EDITOR_TOOLS
-
+#endif // TG_CONFIG_WITH_IMGUI
 	}
 
 	virtual int shutdown() override
 	{
-#if TG_CONFIG_WITH_EDITOR_TOOLS
+#if TG_CONFIG_WITH_IMGUI
 		imguiDestroy();
-#endif // TG_CONFIG_WITH_EDITOR_TOOLS
+#endif // TG_CONFIG_WITH_IMGUI
 
 		// Destroy systems.
 		renderDestroy();
 		cameraDestroy();
-
-		// Disable input.
-		m_input.disable();
+		skyDestroy();
+		inputDestroy();
 
 		// Unload scenes.
 		m_world.unload();
@@ -135,19 +230,11 @@ struct TwilightGuardian : public max::AppI
 	bool update() override
 	{
 		// Process events.
-		if (!processEvents(&m_engineSettings, &m_input))
+		if (!processEvents(&m_engine))
 		{
-#if TG_CONFIG_WITH_EDITOR_TOOLS
+#if TG_CONFIG_WITH_IMGUI
 			// Imgui.
-			imguiBeginFrame(m_input.m_mouseState.m_mx
-				, m_input.m_mouseState.m_my
-				, (m_input.m_mouseState.m_buttons[max::MouseButton::Left] ? IMGUI_MBUT_LEFT : 0)
-				| (m_input.m_mouseState.m_buttons[max::MouseButton::Right] ? IMGUI_MBUT_RIGHT : 0)
-				| (m_input.m_mouseState.m_buttons[max::MouseButton::Middle] ? IMGUI_MBUT_MIDDLE : 0)
-				, m_input.m_mouseState.m_mz
-				, uint16_t(m_engineSettings.m_width)
-				, uint16_t(m_engineSettings.m_height)
-			);
+			imguiBeginFrame(&m_engine);
 
 			struct Resolution
 			{
@@ -201,11 +288,11 @@ struct TwilightGuardian : public max::AppI
 					static bool s_vsync = false;
 					ImGui::Checkbox("VSync", &s_vsync);
 
-					uint32_t reset = m_engineSettings.m_reset;
-					m_engineSettings.m_reset = (s_vsync ? (m_engineSettings.m_reset | MAX_RESET_VSYNC) : (m_engineSettings.m_reset & ~MAX_RESET_VSYNC));
-					if (m_engineSettings.m_reset != reset)
+					uint32_t reset = m_engine.m_reset;
+					m_engine.m_reset = (s_vsync ? (m_engine.m_reset | MAX_RESET_VSYNC) : (m_engine.m_reset & ~MAX_RESET_VSYNC));
+					if (m_engine.m_reset != reset)
 					{
-						max::reset(m_engineSettings.m_width, m_engineSettings.m_height, m_engineSettings.m_reset);
+						max::reset(m_engine.m_width, m_engine.m_height, m_engine.m_reset);
 					}
 				}
 
@@ -265,6 +352,8 @@ struct TwilightGuardian : public max::AppI
 
 					ImGui::SeparatorText("Debug");
 
+					ImGui::Checkbox("Debug Probes", &m_renderSettings.m_debugProbes);
+
 					static int currentDebugbufferIndex = 0;
 					if (ImGui::BeginCombo("Debug Buffer", s_debugbuffers[currentDebugbufferIndex].m_label))
 					{
@@ -288,7 +377,7 @@ struct TwilightGuardian : public max::AppI
 
 				if (ImGui::CollapsingHeader("Camera Settings", ImGuiTreeNodeFlags_DefaultOpen))
 				{
-					ImGui::SeparatorText("Camera");
+					ImGui::SeparatorText("View");
 
 					ImGui::SliderFloat("Near", &m_cameraSettings.m_near, 0.0f, 1.0f);
 					ImGui::SliderFloat("Far", &m_cameraSettings.m_far, 1.0f, 10000.0f);
@@ -299,8 +388,58 @@ struct TwilightGuardian : public max::AppI
 					ImGui::SliderFloat("Speed", &m_cameraSettings.m_moveSpeed, 0.1f, 50.0f);
 				}
 
+				if (ImGui::CollapsingHeader("Camera Settings", ImGuiTreeNodeFlags_DefaultOpen))
+				{
+					ImGui::SliderFloat("Speed", &m_skySettings.m_speed, 0.0f, 1.0f);
+
+					const char* months[] =
+					{
+						"January",
+						"February",
+						"March",
+						"April",
+						"May",
+						"June",
+						"July",
+						"August",
+						"September",
+						"October",
+						"November",
+						"December"
+					};
+					ImGui::Combo("Month", (int*)&m_skySettings.m_month, months, BX_COUNTOF(months));
+				}
+
+				if (ImGui::CollapsingHeader("Scene", ImGuiTreeNodeFlags_DefaultOpen))
+				{
+					ImGui::SeparatorText("Entities");
+					for (auto it = m_entities.m_entities.begin(); it != m_entities.m_entities.end(); ++it)
+					{
+						max::EntityHandle entity = it->second.m_handle;
+						if (!isValid(it->second.m_handle))
+						{
+							break;
+						}
+
+						ImGui::Selectable(it->first.c_str());
+					}
+
+					ImGui::SeparatorText("World");
+					for (auto it = m_world.m_entities.begin(); it != m_world.m_entities.end(); ++it)
+					{
+						max::EntityHandle entity = it->second.m_handle;
+						if (!isValid(it->second.m_handle))
+						{
+							break;
+						}
+
+						ImGui::Selectable(it->first.c_str());
+					}
+				}
+
 				if (ImGui::CollapsingHeader("Other", ImGuiTreeNodeFlags_DefaultOpen))
 				{
+#ifdef TG_CONFIG_WITH_MAYA
 					static bool s_connectToMaya;
 					if (ImGui::Checkbox("Edit in Autodesk Maya", &s_connectToMaya))
 					{
@@ -327,6 +466,7 @@ struct TwilightGuardian : public max::AppI
 							m_world.deserialize();
 						}
 					}
+#endif // TG_CONFIG_WITH_MAYA
 				}
 			}
 			ImGui::End();
@@ -334,28 +474,12 @@ struct TwilightGuardian : public max::AppI
 			imguiEndFrame();
 
 			// Set debug mode.
-			max::setDebug(m_engineSettings.m_debug);
+			max::setDebug(m_engine.m_debug);
 			max::dbgTextClear();
 
-			if (true)
-			{
-				uint32_t idx = 1;
+#endif  // TG_CONFIG_WITH_IMGUI
 
-				max::dbgTextPrintf(0, ++idx, 0xf, "World:");
-				for (auto it = m_world.m_entities.begin(); it != m_world.m_entities.end(); ++it)
-				{
-					max::dbgTextPrintf(0, ++idx, 0xf, "[%u]: %s", idx, it->first.c_str());
-				}
-
-				++idx;
-
-				max::dbgTextPrintf(0, ++idx, 0xf, "Entities:");
-				for (auto it = m_entities.m_entities.begin(); it != m_entities.m_entities.end(); ++it)
-				{
-					max::dbgTextPrintf(0, ++idx, 0xf, "[%u]: %s", idx, it->first.c_str());
-				}
-			}
-
+#if TG_CONFIG_WITH_MAYA
 			// Update maya bridge.
 			if (m_mayaBridge != NULL)
 			{
@@ -363,30 +487,32 @@ struct TwilightGuardian : public max::AppI
 
 				max::dbgTextPrintf(0, 0, 0xf, "Connected to maya...");
 			}
-#endif  // TG_CONFIG_WITH_EDITOR_TOOLS
+#endif  // TG_CONFIG_WITH_MAYA
 
 			// Resize.
-			if (m_engineSettings.m_width  != m_renderSettings.m_viewport.m_width ||
-				m_engineSettings.m_height != m_renderSettings.m_viewport.m_height)
+			if (m_engine.m_width  != m_renderSettings.m_viewport.m_width ||
+				m_engine.m_height != m_renderSettings.m_viewport.m_height)
 			{
-				m_renderSettings.m_viewport.m_width  = m_engineSettings.m_width;
-				m_renderSettings.m_viewport.m_height = m_engineSettings.m_height;
-				m_cameraSettings.m_viewport.m_width  = m_engineSettings.m_width;
-				m_cameraSettings.m_viewport.m_height = m_engineSettings.m_height;
+				m_renderSettings.m_viewport.m_width  = m_engine.m_width;
+				m_renderSettings.m_viewport.m_height = m_engine.m_height;
+				m_cameraSettings.m_viewport.m_width  = m_engine.m_width;
+				m_cameraSettings.m_viewport.m_height = m_engine.m_height;
 
 				renderReset();
 			}
 
+			// @todo You gotta decide dude...
+			// systemUpdate or system.update(). Private or public data.
+
 			// Update scene.
 			m_world.update();
-			m_entities.update();
+			m_entities.update();  
 
 			// Update systems.
+			skyUpdate();
 			cameraUpdate();
 			renderUpdate();
-
-			// Update input.
-			m_input.update();
+			inputUpdate();
 
 			return true;
 		}
@@ -394,17 +520,20 @@ struct TwilightGuardian : public max::AppI
 		return false;
 	}
 
-	EngineSettings m_engineSettings;
+	Engine   m_engine;
+	Callback m_callback;
+
+	SkySettings    m_skySettings;
 	CameraSettings m_cameraSettings;
 	RenderSettings m_renderSettings;
+	InputSettings  m_inputSettings;
 
 	World m_world;
 	Entities m_entities;
-	Input m_input;
 
-#if TG_CONFIG_WITH_EDITOR_TOOLS
+#if TG_CONFIG_WITH_MAYA
 	MayaBridge* m_mayaBridge;
-#endif // TG_CONFIG_WITH_EDITOR_TOOLS
+#endif // TG_CONFIG_WITH_MAYA
 };
 
 MAX_IMPLEMENT_MAIN(TwilightGuardian, "TWILIGHT GUARDIAN");

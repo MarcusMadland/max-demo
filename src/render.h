@@ -18,10 +18,16 @@ struct RenderSettings
 	Rect m_resolution; //!< Current resolution.
 	Rect m_viewport;   //!< Current viewport.
 
+	// Shadow
 	Rect m_shadowMap; //!< Shadowmap resolution.
 
-	const char* m_skybox;     //!< @todo	
+	// Sky
+	float m_sunSize;
+	float m_sunBloom;
+	float m_sunLuminance[3];
+	float m_exposition;
 
+	// Debug
 	enum DebugBuffer
 	{
 		None,
@@ -36,6 +42,8 @@ struct RenderSettings
 		Count
 	};
 	DebugBuffer m_debugbuffer; //!< Show debug buffer.
+
+	bool m_debugProbes;
 
 	bool m_debugbufferR;
 	bool m_debugbufferG;

@@ -3,12 +3,11 @@ $input v_texcoord0
 #include "common/common.sh"
 #include "common/uniforms.sh"
 
-SAMPLER2D(s_surface,         0); // GBuffer Surface
-SAMPLER2D(s_normal,          1); // GBuffer Normal
-SAMPLER2D(s_depth,           2); // GBuffer Depth
-SAMPLER2D(s_radianceAtlas,   3); // Atlas of radiance octahedral probes (x*y, z)
-SAMPLER2D(s_irradianceAtlas, 4); // Atlas of irradiance probes (x*y, z)
-SAMPLER2D(s_depthAtlas,      5); // Atlas of radiance probes (x*y, z)
+SAMPLER2D(s_gbufferNormal,  0); // GBuffer Normal
+SAMPLER2D(s_gbufferSurface, 1); // GBuffer Surface
+SAMPLER2D(s_gbufferDepth,   2); // GBuffer Depth
+
+SAMPLER2D(s_atlasIrradiance, 3); // Atlas of irradiance probes (x*y, z)
 
 vec3 getClosestProbeGridPosition(vec3 wpos, vec3 gridOrigin, vec3 gridSpacing, vec3 gridSize)
 {
@@ -27,13 +26,12 @@ vec3 getClosestProbeGridPosition(vec3 wpos, vec3 gridOrigin, vec3 gridSpacing, v
 void main()
 {
     // Params
-    float roughness   = texture2D(s_surface, v_texcoord0).r; 
-    float metallic    = texture2D(s_surface, v_texcoord0).g; 
-    vec3  normal      = decodeNormalUint(texture2D(s_normal, v_texcoord0).rgb);
-    float deviceDepth = texture2D(s_depth, v_texcoord0).x;
-	float depth       = toClipSpaceDepth(deviceDepth);
-
+    float roughness   = texture2D(s_gbufferSurface, v_texcoord0).r; 
+    float metallic    = texture2D(s_gbufferSurface, v_texcoord0).g; 
+    vec3  normal      = decodeNormalUint(texture2D(s_gbufferNormal, v_texcoord0).rgb);
+    
     //
+    float deviceDepth = texture2D(s_gbufferDepth, v_texcoord0).x;
     if (deviceDepth > 0.9999)
     {
         gl_FragData[0] = vec4(0.0, 0.0, 0.0, 1.0);
@@ -41,7 +39,9 @@ void main()
         return;
     }
 
-    // This is the InvViewProj
+    float depth       = toClipSpaceDepth(deviceDepth);
+
+    // 
     mat4 invViewProj;
 	invViewProj[0] = u_invViewProj0;
 	invViewProj[1] = u_invViewProj1;
@@ -80,7 +80,9 @@ void main()
     vec2 texel = floor(atlasOffsetTexel + octTexel);
 
     // Sample radiance using texelFetch
-    vec3 radiance = texelFetch(s_radianceAtlas, ivec2(texel), 0).rgb; 
+    // @todo Instead of texel fetch lets go with bilinear sampling using texture2D. 
+    // a padding of 1pixel is required for this tho.
+    vec3 radiance = texelFetch(s_atlasIrradiance, ivec2(texel), 0).rgb; 
 
     // Output to render targets
     gl_FragData[0] = vec4(radiance, 1.0); 

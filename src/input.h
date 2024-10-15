@@ -1,6 +1,6 @@
 #pragma once
 
-#include <max/max.h>
+namespace max { struct MouseState; };
 
 struct Action
 {
@@ -19,19 +19,18 @@ struct Action
 	};
 };
 
-struct Input
+struct InputSettings
 {
-	Input();
 
-	void update();
-
-	void enable();
-	void disable();
-
-	bool m_enable;
-
-	float m_mouse[3];
-	max::InputMapping m_mapping[Action::Count];
-
-	max::MouseState m_mouseState;
 };
+
+void inputCreate(InputSettings* _settings, max::MouseState* _mouseState);
+
+void inputDestroy();
+
+void inputUpdate();
+
+void inputEnable();
+
+void inputDisable();
+

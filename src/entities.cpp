@@ -73,18 +73,6 @@ void Entities::load()
 		{1.0f, 1.0f, 1.0f});
 
 	createCube(m_entities,
-		"Ciel",
-		{ {0.0f, 10.25, 0.0f}, {0.0f, 0.0f, 0.0f, 1.0f}, {5.0f, 0.5f, 5.0f} },
-		cube,
-		{ 1.0f, 1.0f, 1.0f });
-
-	createCube(m_entities,
-		"Back",
-		{ {-5.5f, 5.0f, 0.0f}, {0.0f, 0.0f, 0.0f, 1.0f}, {0.5f, 4.75f, 5.0f} },
-		cube,
-		{ 1.0f, 1.0f, 1.0f });
-
-	createCube(m_entities,
 		"Right",
 		{ {0.0f, 5.0f, -5.5f}, {0.0f, 0.0f, 0.0f, 1.0f}, {5.0f, 4.75f, 0.5f} },
 		cube,
@@ -109,9 +97,9 @@ void Entities::load()
 		{ 1.0f, 1.0f, 1.0f });
 
 	// Sun
-	m_entities["Directional Light"].m_handle = max::createEntity();
-	max::addComponent<DirectionalLightComponent>(m_entities["Directional Light"].m_handle,
-		max::createComponent<DirectionalLightComponent>({ { 0.0f, -1.0f, 0.0f }, { 1.0f, 1.0f, 1.0f } })
+	m_entities["Sky"].m_handle = max::createEntity();
+	max::addComponent<SkyComponent>(m_entities["Sky"].m_handle,
+		max::createComponent<SkyComponent>()
 	);
 }
 

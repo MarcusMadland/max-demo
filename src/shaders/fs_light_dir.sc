@@ -4,16 +4,14 @@ $input v_texcoord0
 #include "common/uniforms.sh"
 
 // Atlases
-SAMPLER2D(s_diffuse,  3); 
-SAMPLER2D(s_normal,   4); 
-SAMPLER2D(s_position, 5); 
+SAMPLER2D(s_atlasDiffuse,  0); 
+SAMPLER2D(s_atlasNormal,   1); 
 
 void main()
 {
     // Params.
-    vec3 diffuse = texture2D(s_diffuse, v_texcoord0).rgb;
-    vec3 normal = normalize(texture2D(s_normal, v_texcoord0).xyz * 2.0 - 1.0); // Normalize normals from [-1,1]
-    vec3 wpos = texture2D(s_position, v_texcoord0).rgb;
+    vec3 diffuse = texture2D(s_atlasDiffuse, v_texcoord0).rgb;
+    vec3 normal = normalize(texture2D(s_atlasNormal, v_texcoord0).xyz * 2.0 - 1.0); // Normalize normals from [-1,1]
 
     vec3 lightDir = normalize(u_lightDir); 
     vec3 lightCol = u_lightCol;
@@ -23,6 +21,8 @@ void main()
 
     // Final radiance computation (diffuse only)
     vec3 radiance = diffuse * lightCol * NdotL;
+
+    // @todo Lambert's diffuse lighting + sample sky using sky visibility buffer.
 
     // Output the radiance to the radiance atlas
     gl_FragColor = vec4(radiance, 1.0); 

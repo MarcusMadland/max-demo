@@ -4,28 +4,25 @@ $input v_normal, v_texcoord0, v_texcoord1, v_texcoord2, v_texcoord3
 #include "common/uniforms.sh"
 #include "common/normal_encoding.sh"
 
-SAMPLER2D(s_texDiffuse,   0);
-SAMPLER2D(s_texNormal,    1); 
-SAMPLER2D(s_texRoughness, 2);
-SAMPLER2D(s_texMetallic,  3);
+SAMPLER2D(s_materialDiffuse,   0);
+SAMPLER2D(s_materialNormal,    1); 
+SAMPLER2D(s_materialRoughness, 2);
+SAMPLER2D(s_materialMetallic,  3);
 
 // http://www.thetenthplanet.de/archives/1180
-// "followup: normal mapping without precomputed tangents"
+// Normal mapping without precomputed tangents
 mat3 cotangentFrame(vec3 N, vec3 p, vec2 uv)
 {
-	// get edge vectors of the pixel triangle
 	vec3 dp1 = dFdx(p);
 	vec3 dp2 = dFdy(p);
 	vec2 duv1 = dFdx(uv);
 	vec2 duv2 = dFdy(uv);
 
-	// solve the linear system
 	vec3 dp2perp = cross(dp2, N);
 	vec3 dp1perp = cross(N, dp1);
 	vec3 T = dp2perp * duv1.x + dp1perp * duv2.x;
 	vec3 B = dp2perp * duv1.y + dp1perp * duv2.y;
 
-	// construct a scale-invariant frame
 	float invMax = inversesqrt(max(dot(T,T), dot(B,B)));
 	return mat3(T*invMax, B*invMax, N);
 }
@@ -33,10 +30,10 @@ mat3 cotangentFrame(vec3 N, vec3 p, vec2 uv)
 void main()
 {
 	// Sample textures.
-	vec2 texNormal  = vec3(texture2D(s_texNormal, v_texcoord0).rgb * u_texNormalFactor.rgb).xy;
-	vec3 texDiffuse = texture2D(s_texDiffuse, v_texcoord0).rgb * u_texDiffuseFactor;
-	float roughness = texture2D(s_texRoughness, v_texcoord0).r * u_texRoughnessFactor;
-	float metallic  = texture2D(s_texMetallic, v_texcoord0).r * u_texMetallicFactor;
+	vec2 texNormal  = vec3(texture2D(s_materialNormal, v_texcoord0).rgb * u_texNormalFactor.rgb).xy;
+	vec3 texDiffuse = texture2D(s_materialDiffuse, v_texcoord0).rgb * u_texDiffuseFactor;
+	float roughness = texture2D(s_materialRoughness, v_texcoord0).r * u_texRoughnessFactor;
+	float metallic  = texture2D(s_materialMetallic, v_texcoord0).r * u_texMetallicFactor;
 
 	// get vertex normal
 	vec3 normal = normalize(v_normal);
