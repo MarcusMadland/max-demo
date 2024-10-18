@@ -21,12 +21,6 @@ struct RenderSettings
 	// Shadow
 	Rect m_shadowMap; //!< Shadowmap resolution.
 
-	// Sky
-	float m_sunSize;
-	float m_sunBloom;
-	float m_sunLuminance[3];
-	float m_exposition;
-
 	// Debug
 	enum DebugBuffer
 	{

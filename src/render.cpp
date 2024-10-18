@@ -7,6 +7,45 @@
 
 #include "components.h"
 
+#include <map> // @todo
+
+struct Month
+{
+	enum Enum
+	{
+		January,
+		February,
+		March,
+		April,
+		May,
+		June,
+		July,
+		August,
+		September,
+		October,
+		November,
+		December
+	};
+};
+
+// @todo Rename both of these.
+struct ScreenPosVertex
+{
+	float m_x;
+	float m_y;
+
+	static void init()
+	{
+		ms_layout
+			.begin()
+			.add(max::Attrib::Position, 2, max::AttribType::Float)
+			.end();
+	}
+
+	static max::VertexLayout ms_layout;
+};
+max::VertexLayout ScreenPosVertex::ms_layout;
+
 struct ScreenSpaceQuadVertex
 {
 	float m_x;
@@ -487,11 +526,7 @@ struct CommonResources
 
 	float m_view[16];
 	float m_proj[16];
-
 	float m_viewDir[3];
-
-	float m_sunDir[3];
-	float m_sunCol[3];
 
 	Uniforms* m_uniforms;
 	Samplers* m_samplers;
@@ -585,6 +620,434 @@ static void submit(RenderData* _renderData)
 	}, _renderData);
 }
 
+/// Deferred GBuffer.
+///
+struct GBuffer
+{
+	enum TextureType
+	{
+		Diffuse, //!< .rgb = Diffuse / Albedo / Base color map.
+		Normal,  //!< .rgb = World normals.
+		Surface, //!< .r = Roughness, .g = Metallic
+		Depth,   //!< .r = Depth
+
+		Count
+	};
+
+	void create(CommonResources* _common, max::ViewId _view)
+	{
+		m_view = _view;
+		m_common = _common;
+
+		//
+		m_program = max::loadProgram("vs_gbuffer", "fs_gbuffer");
+
+		// Don't create framebuffer until first render call.
+		m_framebuffer.idx = max::kInvalidHandle;
+	}
+
+	void destroy()
+	{
+		destroyFramebuffer();
+
+		max::destroy(m_program);
+	}
+
+	void render()
+	{
+		// Recreate gbuffer upon reset. 
+		if (m_common->m_firstFrame)
+		{
+			destroyFramebuffer();
+			createFramebuffer();
+		}
+
+		// Render scene to gbuffer.
+		max::setViewFrameBuffer(m_view, m_framebuffer);
+		max::setViewRect(m_view, 0, 0, m_common->m_settings->m_viewport.m_width, m_common->m_settings->m_viewport.m_height);
+		max::setViewClear(m_view, MAX_CLEAR_COLOR | MAX_CLEAR_DEPTH, 0x000000ff, 1.0f, 0);
+		max::setViewTransform(m_view, m_common->m_view, m_common->m_proj);
+
+		m_renderData.m_view = m_view;
+		m_renderData.m_program = m_program;
+		m_renderData.m_common = m_common;
+		m_renderData.m_material = true;
+		submit(&m_renderData);
+	}
+
+	void createFramebuffer()
+	{
+		const RenderSettings::Rect rect = getScaledResolution(m_common);
+
+		max::TextureHandle fbtextures[] =
+		{
+			max::createTexture2D(rect.m_width, rect.m_height, false, 1, max::TextureFormat::RGBA8, MAX_TEXTURE_RT),   // TextureType::Diffuse
+			max::createTexture2D(rect.m_width, rect.m_height, false, 1, max::TextureFormat::RGBA16F, MAX_TEXTURE_RT), // TextureType::Normal
+			max::createTexture2D(rect.m_width, rect.m_height, false, 1, max::TextureFormat::RGBA8, MAX_TEXTURE_RT),   // TextureType::Surface
+			max::createTexture2D(rect.m_width, rect.m_height, false, 1, max::TextureFormat::D32F, MAX_TEXTURE_RT)     // TextureType::Depth
+		};
+		m_framebuffer = max::createFrameBuffer(BX_COUNTOF(fbtextures), fbtextures, true);
+	}
+
+	void destroyFramebuffer()
+	{
+		if (isValid(m_framebuffer))
+		{
+			max::destroy(m_framebuffer); // Textures are destroyed with it.
+		}
+	}
+
+	max::ViewId m_view;
+	CommonResources* m_common;
+
+	RenderData m_renderData;
+
+	max::ProgramHandle m_program;
+	max::FrameBufferHandle m_framebuffer;
+};
+
+/// Sky.
+/// 
+struct Sky
+{
+	struct DynamicValueController
+	{
+		void set(const std::map<float, bx::Vec3>& keymap)
+		{
+			m_keyMap = keymap;
+		}
+
+		bx::Vec3 get(float time) const
+		{
+			typename std::map<float, bx::Vec3>::const_iterator itUpper = m_keyMap.upper_bound(time + 1e-6f);
+			typename std::map<float, bx::Vec3>::const_iterator itLower = itUpper;
+
+			--itLower;
+
+			if (itLower == m_keyMap.end())
+			{
+				return itUpper->second;
+			}
+
+			if (itUpper == m_keyMap.end())
+			{
+				return itLower->second;
+			}
+
+			float lowerTime = itLower->first;
+			const bx::Vec3& lowerVal = itLower->second;
+			float upperTime = itUpper->first;
+			const bx::Vec3& upperVal = itUpper->second;
+
+			if (lowerTime == upperTime)
+			{
+				return lowerVal;
+			}
+
+			return interpolate(lowerTime, lowerVal, upperTime, upperVal, time);
+		};
+
+		void clear()
+		{
+			m_keyMap.clear();
+		};
+
+	private:
+		bx::Vec3 interpolate(float lowerTime, const bx::Vec3& lowerVal, float upperTime, const bx::Vec3& upperVal, float time) const
+		{
+			const float tt = (time - lowerTime) / (upperTime - lowerTime);
+			const bx::Vec3 result = bx::lerp(lowerVal, upperVal, tt);
+			return result;
+		};
+
+		std::map<float, bx::Vec3> m_keyMap;
+	};
+
+	void create(CommonResources* _common, max::ViewId _view)
+	{
+		m_view = _view;
+		m_common = _common;
+
+		// Defaults
+		m_timeOffset = bx::getHPCounter();
+		m_time = 0.0f;
+		m_timeScale = 1.0f;
+
+		m_northDir = bx::Vec3(1.0f, 0.0f, 0.0f);
+		m_sunDir = bx::Vec3(0.0f, -1.0f, 0.0f);
+		m_upDir = bx::Vec3(0.0f, 1.0f, 0.0f);
+		m_latitude = 50.0f;
+		m_month = Month::October;
+		m_eclipticObliquity = bx::toRad(23.4f);
+		m_delta = 0.0f;
+		m_timeOffset = bx::getHPCounter();
+		m_time = 0.0f;
+		m_timeScale = 1.0f;
+		m_turbidity = 2.15f;
+
+		// Set maps
+		const std::map<float, bx::Vec3> sunLuminanceXYZTable =
+		{
+			{  5.0f, {  0.000000f,  0.000000f,  0.000000f } },
+			{  7.0f, { 12.703322f, 12.989393f,  9.100411f } },
+			{  8.0f, { 13.202644f, 13.597814f, 11.524929f } },
+			{  9.0f, { 13.192974f, 13.597458f, 12.264488f } },
+			{ 10.0f, { 13.132943f, 13.535914f, 12.560032f } },
+			{ 11.0f, { 13.088722f, 13.489535f, 12.692996f } },
+			{ 12.0f, { 13.067827f, 13.467483f, 12.745179f } },
+			{ 13.0f, { 13.069653f, 13.469413f, 12.740822f } },
+			{ 14.0f, { 13.094319f, 13.495428f, 12.678066f } },
+			{ 15.0f, { 13.142133f, 13.545483f, 12.526785f } },
+			{ 16.0f, { 13.201734f, 13.606017f, 12.188001f } },
+			{ 17.0f, { 13.182774f, 13.572725f, 11.311157f } },
+			{ 18.0f, { 12.448635f, 12.672520f,  8.267771f } },
+			{ 20.0f, {  0.000000f,  0.000000f,  0.000000f } },
+		};
+		m_sunLuminanceXYZ.set(sunLuminanceXYZTable);
+
+		const std::map<float, bx::Vec3> skyLuminanceXYZTable =
+		{
+			{  0.0f, { 0.308f,    0.308f,    0.411f    } },
+			{  1.0f, { 0.308f,    0.308f,    0.410f    } },
+			{  2.0f, { 0.301f,    0.301f,    0.402f    } },
+			{  3.0f, { 0.287f,    0.287f,    0.382f    } },
+			{  4.0f, { 0.258f,    0.258f,    0.344f    } },
+			{  5.0f, { 0.258f,    0.258f,    0.344f    } },
+			{  7.0f, { 0.962851f, 1.000000f, 1.747835f } },
+			{  8.0f, { 0.967787f, 1.000000f, 1.776762f } },
+			{  9.0f, { 0.970173f, 1.000000f, 1.788413f } },
+			{ 10.0f, { 0.971431f, 1.000000f, 1.794102f } },
+			{ 11.0f, { 0.972099f, 1.000000f, 1.797096f } },
+			{ 12.0f, { 0.972385f, 1.000000f, 1.798389f } },
+			{ 13.0f, { 0.972361f, 1.000000f, 1.798278f } },
+			{ 14.0f, { 0.972020f, 1.000000f, 1.796740f } },
+			{ 15.0f, { 0.971275f, 1.000000f, 1.793407f } },
+			{ 16.0f, { 0.969885f, 1.000000f, 1.787078f } },
+			{ 17.0f, { 0.967216f, 1.000000f, 1.773758f } },
+			{ 18.0f, { 0.961668f, 1.000000f, 1.739891f } },
+			{ 20.0f, { 0.264f,    0.264f,    0.352f    } },
+			{ 21.0f, { 0.264f,    0.264f,    0.352f    } },
+			{ 22.0f, { 0.290f,    0.290f,    0.386f    } },
+			{ 23.0f, { 0.303f,    0.303f,    0.404f    } },
+		};
+		m_skyLuminanceXYZ.set(skyLuminanceXYZTable);
+
+		// Sky init
+		m_program = max::loadProgram("vs_sky", "fs_sky");
+
+		uint32_t verticalCount = 32;
+		uint32_t horizontalCount = 32;
+
+		ScreenPosVertex* vertices = (ScreenPosVertex*)bx::alloc(max::getAllocator()
+			, verticalCount * horizontalCount * sizeof(ScreenPosVertex)
+		);
+
+		for (int i = 0; i < verticalCount; i++)
+		{
+			for (int j = 0; j < horizontalCount; j++)
+			{
+				ScreenPosVertex& v = vertices[i * verticalCount + j];
+				v.m_x = float(j) / (horizontalCount - 1) * 2.0f - 1.0f;
+				v.m_y = float(i) / (verticalCount - 1) * 2.0f - 1.0f;
+			}
+		}
+
+		uint16_t* indices = (uint16_t*)bx::alloc(max::getAllocator()
+			, (verticalCount - 1) * (horizontalCount - 1) * 6 * sizeof(uint16_t)
+		);
+
+		int k = 0;
+		for (int i = 0; i < verticalCount - 1; i++)
+		{
+			for (int j = 0; j < horizontalCount - 1; j++)
+			{
+				indices[k++] = (uint16_t)(j + 0 + horizontalCount * (i + 0));
+				indices[k++] = (uint16_t)(j + 1 + horizontalCount * (i + 0));
+				indices[k++] = (uint16_t)(j + 0 + horizontalCount * (i + 1));
+
+				indices[k++] = (uint16_t)(j + 1 + horizontalCount * (i + 0));
+				indices[k++] = (uint16_t)(j + 1 + horizontalCount * (i + 1));
+				indices[k++] = (uint16_t)(j + 0 + horizontalCount * (i + 1));
+			}
+		}
+
+		m_vbh = max::createVertexBuffer(max::copy(vertices, sizeof(ScreenPosVertex) * verticalCount * horizontalCount), ScreenPosVertex::ms_layout);
+		m_ibh = max::createIndexBuffer(max::copy(indices, sizeof(uint16_t) * k));
+
+		bx::free(max::getAllocator(), indices);
+		bx::free(max::getAllocator(), vertices);
+
+		// Update sun
+		calculateSunOrbit();
+		updateSunPosition(0.0f - 12.0f);
+	}
+
+	void destroy()
+	{
+		max::destroy(m_program);
+	}
+
+	void render(GBuffer* _gbuffer)
+	{
+		max::setViewFrameBuffer(m_view, MAX_INVALID_HANDLE);
+		max::setViewRect(m_view, 0, 0, m_common->m_settings->m_viewport.m_width, m_common->m_settings->m_viewport.m_height);
+		max::setViewTransform(m_view, m_common->m_view, m_common->m_proj);
+		//max::setViewClear(m_view
+		//	, MAX_CLEAR_COLOR | MAX_CLEAR_DEPTH
+		//	, 0x000000ff
+		//	, 1.0f
+		//	, 0
+		//);
+
+		// Time
+		int64_t now = bx::getHPCounter();
+		static int64_t last = now;
+		const int64_t frameTime = now - last;
+		last = now;
+		const double freq = double(bx::getHPFrequency());
+		const float deltaTime = float(frameTime / freq);
+		m_time += m_timeScale * deltaTime;
+		m_time = bx::mod(m_time, 24.0f);
+
+		// Update sun.
+		calculateSunOrbit();
+		updateSunPosition(m_time - 12.0f);
+
+		bx::memCopy(m_common->m_uniforms->m_lightDir, &m_sunDir.x, sizeof(float) * 3);
+		m_common->m_uniforms->m_lightCol[0] = 1.0f;
+		m_common->m_uniforms->m_lightCol[1] = 1.0f;
+		m_common->m_uniforms->m_lightCol[2] = 1.0f;
+
+		//
+		bx::Vec3 sunLuminanceXYZ = m_sunLuminanceXYZ.get(m_time);
+		bx::Vec3 sunLuminanceRGB = xyzToRgb(sunLuminanceXYZ);
+
+		bx::Vec3 skyLuminanceXYZ = m_skyLuminanceXYZ.get(m_time);
+		bx::Vec3 skyLuminanceRGB = xyzToRgb(skyLuminanceXYZ);
+
+		bx::memCopy(m_common->m_uniforms->m_sunLuminance, &sunLuminanceRGB.x, sizeof(float) * 3);
+		bx::memCopy(m_common->m_uniforms->m_skyLuminance, &skyLuminanceXYZ.x, sizeof(float) * 3);
+
+		//
+		m_common->m_uniforms->m_sunSize = 0.02f;
+		m_common->m_uniforms->m_sunBloom = 3.0f;
+		m_common->m_uniforms->m_exposition = 0.1f;
+		m_common->m_uniforms->m_time = m_time;
+
+		//
+		float perezCoeff[4 * 5];
+		computePerezCoeff(2.15f, perezCoeff);
+		bx::memCopy(m_common->m_uniforms->m_perezCoeff, perezCoeff, sizeof(float) * (4 * 5));
+
+		// Submit.
+		max::setTexture(0, m_common->m_samplers->s_gbufferDepth, max::getTexture(_gbuffer->m_framebuffer, GBuffer::Depth));
+		max::setState(MAX_STATE_WRITE_RGB | MAX_STATE_DEPTH_TEST_EQUAL);
+		max::setIndexBuffer(m_ibh);
+		max::setVertexBuffer(0, m_vbh);
+		max::submit(m_view, m_program);
+	}
+
+	void computePerezCoeff(float _turbidity, float* _outPerezCoeff)
+	{
+		// Turbidity tables. Taken from:
+		// A. J. Preetham, P. Shirley, and B. Smits. A Practical Analytic Model for Daylight. SIGGRAPH '99
+		// Coefficients correspond to xyY colorspace.
+		const bx::Vec3 abcde[] =
+		{
+			{ -0.2592f, -0.2608f, -1.4630f },
+			{  0.0008f,  0.0092f,  0.4275f },
+			{  0.2125f,  0.2102f,  5.3251f },
+			{ -0.8989f, -1.6537f, -2.5771f },
+			{  0.0452f,  0.0529f,  0.3703f },
+		};
+		const bx::Vec3 abcdeT[] =
+		{
+			{ -0.0193f, -0.0167f,  0.1787f },
+			{ -0.0665f, -0.0950f, -0.3554f },
+			{ -0.0004f, -0.0079f, -0.0227f },
+			{ -0.0641f, -0.0441f,  0.1206f },
+			{ -0.0033f, -0.0109f, -0.0670f },
+		};
+
+		const bx::Vec3 turbidity = { _turbidity, _turbidity, _turbidity };
+		for (uint32_t ii = 0; ii < 5; ++ii)
+		{
+			const bx::Vec3 tmp = bx::mad(abcdeT[ii], turbidity, abcde[ii]);
+			float* out = _outPerezCoeff + 4 * ii;
+			bx::store(out, tmp);
+			out[3] = 0.0f;
+		}
+	}
+
+	void calculateSunOrbit()
+	{
+		const float day = 30.0f * float(m_month) + 15.0f;
+		float lambda = 280.46f + 0.9856474f * day;
+		lambda = bx::toRad(lambda);
+		m_delta = bx::asin(bx::sin(m_eclipticObliquity) * bx::sin(lambda));
+	}
+
+	void updateSunPosition(float _hour)
+	{
+		const float latitude = bx::toRad(m_latitude);
+		const float hh = _hour * bx::kPi / 12.0f;
+		const float azimuth = bx::atan2(
+			bx::sin(hh)
+			, bx::cos(hh) * bx::sin(latitude) - bx::tan(m_delta) * bx::cos(latitude)
+		);
+
+		const float altitude = bx::asin(
+			bx::sin(latitude) * bx::sin(m_delta) + bx::cos(latitude) * bx::cos(m_delta) * bx::cos(hh)
+		);
+
+		const bx::Quaternion rot0 = bx::fromAxisAngle(m_upDir, -azimuth);
+		const bx::Vec3 dir = bx::mul(m_northDir, rot0);
+		const bx::Vec3 uxd = bx::cross(m_upDir, dir);
+
+		const bx::Quaternion rot1 = bx::fromAxisAngle(uxd, altitude);
+		m_sunDir = bx::mul(dir, rot1);
+	}
+
+	bx::Vec3 xyzToRgb(const bx::Vec3& xyz)
+	{
+		const float xyz2rgb[] =
+		{
+			3.240479f, -0.969256f,  0.055648f,
+			-1.53715f,   1.875991f, -0.204043f,
+			-0.49853f,   0.041556f,  1.057311f,
+		};
+
+		bx::Vec3 rgb(bx::InitNone);
+		rgb.x = xyz2rgb[0] * xyz.x + xyz2rgb[3] * xyz.y + xyz2rgb[6] * xyz.z;
+		rgb.y = xyz2rgb[1] * xyz.x + xyz2rgb[4] * xyz.y + xyz2rgb[7] * xyz.z;
+		rgb.z = xyz2rgb[2] * xyz.x + xyz2rgb[5] * xyz.y + xyz2rgb[8] * xyz.z;
+		return rgb;
+	};
+
+	max::ViewId m_view;
+	CommonResources* m_common;
+
+	bx::Vec3 m_northDir = { 0.0f, 0.0f, 0.0f };
+	bx::Vec3 m_sunDir = { 0.0f, 0.0f, 0.0f };
+	bx::Vec3 m_upDir = { 0.0f, 0.0f, 0.0f };
+	float m_latitude;
+	Month::Enum m_month;
+	float m_eclipticObliquity;
+	float m_delta;
+
+	max::VertexBufferHandle m_vbh;
+	max::IndexBufferHandle m_ibh;
+	max::ProgramHandle m_program;
+
+	DynamicValueController m_sunLuminanceXYZ;
+	DynamicValueController m_skyLuminanceXYZ;
+
+	float m_time;
+	float m_timeScale;
+	int64_t m_timeOffset;
+	float m_turbidity;
+};
+
 /// Shadow Mapping @todo Cascaded shadow mapping when?
 ///
 struct SM
@@ -608,7 +1071,7 @@ struct SM
 		max::destroy(m_program);
 	}
 
-	void render()
+	void render(Sky* _sky)
 	{
 		// Recreate shadow map upon reset.
 		if (m_common->m_firstFrame)
@@ -617,8 +1080,8 @@ struct SM
 			createFramebuffer(m_common->m_settings->m_shadowMap.m_width, m_common->m_settings->m_shadowMap.m_height);
 		}
 
-		// Calculate view.
-		const bx::Vec3 eye = { -m_common->m_sunDir[0], -m_common->m_sunDir[1], -m_common->m_sunDir[2] }; 
+		// Calculate view. 
+		const bx::Vec3 eye = bx::mul(_sky->m_sunDir, -1.0f); 
 		const bx::Vec3 at = { 0.0f,  0.0f, 0.0f };
 		float view[16];
 		bx::mtxLookAt(view, eye, at); 
@@ -676,92 +1139,6 @@ struct SM
 	max::FrameBufferHandle m_framebuffer;
 };
  
-/// Deferred GBuffer.
-///
-struct GBuffer
-{
-	enum TextureType
-	{
-		Diffuse, //!< .rgb = Diffuse / Albedo / Base color map.
-		Normal,  //!< .rgb = World normals.
-		Surface, //!< .r = Roughness, .g = Metallic
-		Depth,   //!< .r = Depth
-
-		Count
-	};
-
-	void create(CommonResources* _common, max::ViewId _view)
-	{
-		m_view = _view;
-		m_common = _common;
-
-		//
-		m_program = max::loadProgram("vs_gbuffer", "fs_gbuffer");
-
-		// Don't create framebuffer until first render call.
-		m_framebuffer.idx = max::kInvalidHandle;
-	}
-
-	void destroy()
-	{
-		destroyFramebuffer();
-		
-		max::destroy(m_program);
-	}
-
-	void render()
-	{
-		// Recreate gbuffer upon reset. 
-		if (m_common->m_firstFrame)
-		{
-			destroyFramebuffer();
-			createFramebuffer();
-		}
-
-		// Render scene to gbuffer.
-		max::setViewFrameBuffer(m_view, m_framebuffer);
-		max::setViewRect(m_view, 0, 0, m_common->m_settings->m_viewport.m_width, m_common->m_settings->m_viewport.m_height);
-		max::setViewClear(m_view, MAX_CLEAR_COLOR | MAX_CLEAR_DEPTH, 0x000000ff, 1.0f, 0);
-		max::setViewTransform(m_view, m_common->m_view, m_common->m_proj);
-
-		m_renderData.m_view = m_view;
-		m_renderData.m_program = m_program;
-		m_renderData.m_common = m_common;
-		m_renderData.m_material = true;
-		submit(&m_renderData);
-	}
-
-	void createFramebuffer()
-	{
-		const RenderSettings::Rect rect = getScaledResolution(m_common);
-
-		max::TextureHandle fbtextures[] =
-		{
-			max::createTexture2D(rect.m_width, rect.m_height, false, 1, max::TextureFormat::RGBA8, MAX_TEXTURE_RT),   // TextureType::Diffuse
-			max::createTexture2D(rect.m_width, rect.m_height, false, 1, max::TextureFormat::RGBA16F, MAX_TEXTURE_RT), // TextureType::Normal
-			max::createTexture2D(rect.m_width, rect.m_height, false, 1, max::TextureFormat::RGBA8, MAX_TEXTURE_RT),   // TextureType::Surface
-			max::createTexture2D(rect.m_width, rect.m_height, false, 1, max::TextureFormat::D32F, MAX_TEXTURE_RT)     // TextureType::Depth
-		};
-		m_framebuffer = max::createFrameBuffer(BX_COUNTOF(fbtextures), fbtextures, true);
-	}
-
-	void destroyFramebuffer()
-	{
-		if (isValid(m_framebuffer))
-		{
-			max::destroy(m_framebuffer); // Textures are destroyed with it.
-		}
-	}
-
-	max::ViewId m_view;
-	CommonResources* m_common;
-
-	RenderData m_renderData;
-
-	max::ProgramHandle m_program;
-	max::FrameBufferHandle m_framebuffer;
-};
-
 // @todo Move this.
 constexpr uint32_t kCubemapResolution = 1024;
 constexpr uint32_t kOctahedralResolution = 48;
@@ -853,12 +1230,13 @@ struct GI
 			max::setViewRect(m_viewId0, 0, 0, atlasWidth, atlasHeight);
 			max::setViewTransform(m_viewId0, NULL, proj);
 
-			m_common->m_uniforms->m_lightDir[0] = m_common->m_sunDir[0];
-			m_common->m_uniforms->m_lightDir[1] = m_common->m_sunDir[1];
-			m_common->m_uniforms->m_lightDir[2] = m_common->m_sunDir[2];
-			m_common->m_uniforms->m_lightCol[0] = m_common->m_sunCol[0];
-			m_common->m_uniforms->m_lightCol[1] = m_common->m_sunCol[1];
-			m_common->m_uniforms->m_lightCol[2] = m_common->m_sunCol[2];
+			//m_common->m_uniforms->m_lightDir[0] = _sky->m_sunDir.x;
+			//m_common->m_uniforms->m_lightDir[1] = _sky->m_sunDir.y;
+			//m_common->m_uniforms->m_lightDir[2] = _sky->m_sunDir.z;
+			// @todo
+			//m_common->m_uniforms->m_lightCol[0] = _sky->m_sunCol.x;
+			//m_common->m_uniforms->m_lightCol[1] = _sky->m_sunCol.y;
+			//m_common->m_uniforms->m_lightCol[2] = _sky->m_sunCol.z;
 
 			max::setTexture(0, m_common->m_samplers->s_atlasDiffuse,  m_diffuseAtlas);
 			max::setTexture(1, m_common->m_samplers->s_atlasNormal,   m_normalAtlas);
@@ -1250,118 +1628,6 @@ struct Forward
 	max::ProgramHandle m_programProbe;
 };
 
-/// Skybox.
-/// 
-/// 
-/*
-struct Skybox
-{
-	void create(CommonResources* _common, max::ViewId _view)
-	{
-		m_view = _view;
-		m_common = _common;
-
-		//
-		m_program = max::loadProgram("vs_skybox", "fs_skybox");
-	}
-
-	void destroy()
-	{
-		max::destroy(m_program);
-	}
-
-	void render(GBuffer* _gbuffer)
-	{
-		float proj[16];
-		bx::mtxOrtho(proj, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 100.0f, 0.0f, max::getCaps()->homogeneousDepth);
-
-		max::setViewFrameBuffer(m_view, MAX_INVALID_HANDLE);
-		max::setViewRect(m_view, 0, 0, m_common->m_settings->m_viewport.m_width, m_common->m_settings->m_viewport.m_height);
-		max::setViewTransform(m_view, NULL, proj);
-
-		bx::Vec3 toTargetNorm = { -m_common->m_viewDir[0], m_common->m_viewDir[1], m_common->m_viewDir[2] };
-		const bx::Vec3 right = bx::normalize(bx::cross({ 0.0f, 1.0f, 0.0f }, toTargetNorm));
-		const bx::Vec3 up = bx::normalize(bx::cross(toTargetNorm, right));
-		m_common->m_uniforms->m_cameraMtx[0]  = right.x;
-		m_common->m_uniforms->m_cameraMtx[1]  = right.y;
-		m_common->m_uniforms->m_cameraMtx[2]  = right.z;
-		m_common->m_uniforms->m_cameraMtx[3]  = 0.0f;
-		m_common->m_uniforms->m_cameraMtx[4]  = up.x;
-		m_common->m_uniforms->m_cameraMtx[5]  = up.y;
-		m_common->m_uniforms->m_cameraMtx[6]  = up.z;
-		m_common->m_uniforms->m_cameraMtx[7]  = 0.0f;
-		m_common->m_uniforms->m_cameraMtx[8]  = toTargetNorm.x;
-		m_common->m_uniforms->m_cameraMtx[9]  = toTargetNorm.y;
-		m_common->m_uniforms->m_cameraMtx[10] = toTargetNorm.z;
-		m_common->m_uniforms->m_cameraMtx[11] = 0.0f;
-		m_common->m_uniforms->m_cameraMtx[12] = 0.0f;
-		m_common->m_uniforms->m_cameraMtx[13] = 0.0f;
-		m_common->m_uniforms->m_cameraMtx[14] = 0.0f;
-		m_common->m_uniforms->m_cameraMtx[15] = 1.0f;
-
-		max::setTexture(0, m_common->m_samplers->s_skybox, m_common->m_skybox);
-		max::setTexture(1, m_common->m_samplers->s_gbufferDepth, max::getTexture(_gbuffer->m_framebuffer, GBuffer::Depth));
-		max::setState(0
-			| MAX_STATE_WRITE_RGB
-			| MAX_STATE_DEPTH_TEST_LESS
-		);
-
-		screenSpaceQuad(max::getCaps()->originBottomLeft);
-
-		max::submit(m_view, m_program);
-	}
-
-	max::ViewId m_view;
-	CommonResources* m_common;
-
-	max::ProgramHandle m_program;
-};
-*/
-
-/// Perez Sky.
-/// 
-struct Sky
-{
-	void create(CommonResources* _common, max::ViewId _view)
-	{
-		m_view = _view;
-		m_common = _common;
-
-		//
-		m_program = max::loadProgram("vs_sky", "fs_sky");
-	}
-
-	void destroy()
-	{
-		max::destroy(m_program);
-	}
-
-	void render(GBuffer* _gbuffer)
-	{
-		float proj[16];
-		bx::mtxOrtho(proj, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 100.0f, 0.0f, max::getCaps()->homogeneousDepth);
-
-		max::setViewFrameBuffer(m_view, MAX_INVALID_HANDLE);
-		max::setViewRect(m_view, 0, 0, m_common->m_settings->m_viewport.m_width, m_common->m_settings->m_viewport.m_height);
-		max::setViewTransform(m_view, NULL, proj);
-
-		max::setTexture(0, m_common->m_samplers->s_gbufferDepth, max::getTexture(_gbuffer->m_framebuffer, GBuffer::Depth));
-		max::setState(0
-			| MAX_STATE_WRITE_RGB
-			| MAX_STATE_DEPTH_TEST_LESS
-		);
-
-		screenSpaceQuad(max::getCaps()->originBottomLeft);
-
-		max::submit(m_view, m_program);
-	}
-
-	max::ViewId m_view;
-	CommonResources* m_common;
-
-	max::ProgramHandle m_program;
-};
-
 /// Render system.
 ///
 struct RenderSystem
@@ -1369,6 +1635,7 @@ struct RenderSystem
 	void create(RenderSettings* _settings)
 	{
 		// Init statics.
+		ScreenPosVertex::init();
 		ScreenSpaceQuadVertex::init();
 
 		// Create uniforms params.
@@ -1416,9 +1683,9 @@ struct RenderSystem
 		m_sky.destroy();
 		m_combine.destroy();
 		m_accumulation.destroy();
+		m_gi.destroy();
 		m_gbuffer.destroy();
 		m_sm.destroy();
-		m_gi.destroy();
 
 		// Destroy uniforms params.
 		m_probes.destroy();
@@ -1445,22 +1712,8 @@ struct RenderSystem
 
 		}, this);
 
-		max::System<SkyComponent> sun;
-		sun.each(1, [](max::EntityHandle _entity, void* _userData)
-		{
-			RenderSystem* system = (RenderSystem*)_userData;
-
-			SkyComponent* sc = max::getComponent<SkyComponent>(_entity);
-			system->m_common.m_sunDir[0] = sc->m_direction.x;
-			system->m_common.m_sunDir[1] = sc->m_direction.y;
-			system->m_common.m_sunDir[2] = sc->m_direction.z;
-			system->m_common.m_sunCol[0] = sc->m_color.x;
-			system->m_common.m_sunCol[1] = sc->m_color.y;
-			system->m_common.m_sunCol[2] = sc->m_color.z;
-
-		}, this);
-		
-		// Uniforms. @todo EWWWWWW, you fucking disgusting lil gnome. You know what to do.
+		// Uniforms. @todo EWWWWWW, you fucking disgusting lil gnome. 
+		// Move these into responsible render techniques. GI for volumes etc..
 		m_uniforms.m_volumeSpacing = m_probes.m_spacing;
 
 		const bx::Vec3 min = m_probes.m_position;
@@ -1486,9 +1739,9 @@ struct RenderSystem
 		m_uniforms.submitPerFrame();
 
 		// Render all render techniques.
-		m_sm.render();
+		m_sm.render(&m_sky); // @todo Do we want sky as input here? Its using previous frame sky values since sm renders first.
 		m_gbuffer.render();
-		m_gi.render();
+		m_gi.render(); // @todo This also relies on uniforms.lightDir which is caluclated in sky. So this is also using previous frame sky values.
 		m_accumulation.render(&m_gbuffer, &m_gi);
 		m_combine.render(&m_gbuffer, &m_accumulation);
 		m_sky.render(&m_gbuffer);

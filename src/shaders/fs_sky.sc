@@ -24,9 +24,9 @@ float n4rand_ss(in vec2 n)
 void main()
 {
 	// Depth test
-    float deviceDepth = texture2D(s_gbufferDepth, v_texcoord0).x;
+    float deviceDepth = texture2D(s_gbufferDepth, v_texcoord0 * 0.5 + 0.5).x;
 	float depth       = toClipSpaceDepth(deviceDepth);
-
+	
     if (deviceDepth < 0.9999)
     {
         discard;

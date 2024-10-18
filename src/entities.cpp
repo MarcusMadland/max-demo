@@ -68,7 +68,7 @@ void Entities::load()
 	
 	createCube(m_entities, 
 		"Floor", 
-		{ {0.0f, -0.25, 0.0f}, {0.0f, 0.0f, 0.0f, 1.0f}, {5.0f, 0.5f, 5.0f} },
+		{ {0.0f, -0.25, 0.0f}, {0.0f, 0.0f, 0.0f, 1.0f}, {100.0f, 0.5f, 100.0f} },
 		cube,
 		{1.0f, 1.0f, 1.0f});
 
@@ -95,12 +95,6 @@ void Entities::load()
 		{ {0.5f, 0.75f, -2.0f}, {0.0f, 0.0f, 0.0f, 1.0f}, {1.5f, 1.5f, 1.5f} },
 		cube,
 		{ 1.0f, 1.0f, 1.0f });
-
-	// Sun
-	m_entities["Sky"].m_handle = max::createEntity();
-	max::addComponent<SkyComponent>(m_entities["Sky"].m_handle,
-		max::createComponent<SkyComponent>()
-	);
 }
 
 void Entities::unload()

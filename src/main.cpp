@@ -8,7 +8,6 @@
 #include "components.h"
 #include "render.h"
 #include "camera.h"
-#include "sky.h"
 
 #ifndef TG_CONFIG_WITH_IMGUI
 #	define TG_CONFIG_WITH_IMGUI 1
@@ -143,10 +142,6 @@ struct TwilightGuardian : public max::AppI
 		m_engine.m_debug = MAX_DEBUG_NONE;
 		m_engine.m_reset = MAX_RESET_NONE;
 
-		// Sky settings.
-		m_skySettings.m_month = Month::October;
-		m_skySettings.m_speed = 1.0f;
-
 		// Camera settings.
 		m_cameraSettings.m_viewport.m_width = kAppWidth;
 		m_cameraSettings.m_viewport.m_height = kAppHeight;
@@ -175,7 +170,7 @@ struct TwilightGuardian : public max::AppI
 	{
 		// Initialize engine.
 		max::Init init;
-		init.rendererType = max::RendererType::OpenGL;
+		init.rendererType = max::RendererType::Vulkan;
 		init.physicsType = max::PhysicsType::Count;
 		init.vendorId = MAX_PCI_ID_NONE;
 		init.platformData.nwh  = max::getNativeWindowHandle({0});
@@ -192,7 +187,6 @@ struct TwilightGuardian : public max::AppI
 		m_entities.load();
 
 		// Create systems.
-		skyCreate(&m_skySettings);
 		cameraCreate(&m_cameraSettings);
 		renderCreate(&m_renderSettings);
 		inputCreate(&m_inputSettings, &m_engine.m_mouseState);
@@ -214,7 +208,6 @@ struct TwilightGuardian : public max::AppI
 		// Destroy systems.
 		renderDestroy();
 		cameraDestroy();
-		skyDestroy();
 		inputDestroy();
 
 		// Unload scenes.
@@ -236,238 +229,54 @@ struct TwilightGuardian : public max::AppI
 			// Imgui.
 			imguiBeginFrame(&m_engine);
 
-			struct Resolution
-			{
-				const char* m_label;
-				int m_width;
-				int m_height;
-			};
-
-			const Resolution s_resolutions[] =
-			{
-				{ "1920x1080", 1920, 1080 },
-				{ "1280x720", 1280, 720 },
-				{ "720x480", 720, 480 },
-				{ "480x360", 480, 360 },
-			};
-
-			const Resolution s_shadowmap[] =
-			{
-				{ "4096x4096", 4096, 4096 },
-				{ "2048x2048", 2048, 2048 },
-				{ "1024x1024", 1024, 1024 },
-				{ "512x512", 512, 512 },
-			};
-
-			struct DebugBuffer
-			{
-				const char* m_label;
-				RenderSettings::DebugBuffer m_enum;
-			};
-
-			const DebugBuffer s_debugbuffers[] =
-			{
-				{ "None", RenderSettings::DebugBuffer::None },
-				{ "Diffuse", RenderSettings::DebugBuffer::Diffuse },
-				{ "Normal", RenderSettings::DebugBuffer::Normal },
-				{ "Surface", RenderSettings::DebugBuffer::Surface },
-				{ "Depth", RenderSettings::DebugBuffer::Depth },
-				{ "Irradiance", RenderSettings::DebugBuffer::Irradiance },
-				{ "Specular", RenderSettings::DebugBuffer::Specular },
-			};
-
 			ImGui::SetNextWindowPos(ImVec2(10, 10));
 			ImGui::SetNextWindowSizeConstraints({ 200, 100 }, { 1920, 1920 });
 			ImGui::SetNextWindowCollapsed(true, ImGuiCond_Appearing);
 			if (ImGui::Begin("MAX Engine | Dev Menu", NULL, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoMove))
 			{
-				if (ImGui::CollapsingHeader("Engine Settings", ImGuiTreeNodeFlags_DefaultOpen))
+				if (ImGui::CollapsingHeader("Scene"))
 				{
-					ImGui::SeparatorText("Graphics API");
 
-					static bool s_vsync = false;
-					ImGui::Checkbox("VSync", &s_vsync);
-
-					uint32_t reset = m_engine.m_reset;
-					m_engine.m_reset = (s_vsync ? (m_engine.m_reset | MAX_RESET_VSYNC) : (m_engine.m_reset & ~MAX_RESET_VSYNC));
-					if (m_engine.m_reset != reset)
-					{
-						max::reset(m_engine.m_width, m_engine.m_height, m_engine.m_reset);
-					}
 				}
 
-				if (ImGui::CollapsingHeader("Render Settings", ImGuiTreeNodeFlags_DefaultOpen))
+				if (ImGui::CollapsingHeader("Camera"))
 				{
-					ImGui::SeparatorText("Renderer");
 
-					ImGui::SliderInt("Active Render Camera", (int*)&m_renderSettings.m_activeCameraIdx, 0, 1);
-
-					static int currentResolutionIndex = 0;
-					if (ImGui::BeginCombo("Display Resolution", s_resolutions[currentResolutionIndex].m_label)) 
-					{
-						for (int i = 0; i < IM_ARRAYSIZE(s_resolutions); i++)
-						{
-							bool isSelected = (currentResolutionIndex == i);
-							if (ImGui::Selectable(s_resolutions[i].m_label, isSelected))
-							{
-								currentResolutionIndex = i;
-
-								m_renderSettings.m_resolution.m_width = s_resolutions[i].m_width;
-								m_renderSettings.m_resolution.m_height = s_resolutions[i].m_height;
-
-								renderReset();
-							}
-							if (isSelected) 
-							{
-								ImGui::SetItemDefaultFocus(); 
-							}
-						}
-						ImGui::EndCombo();
-					}
-
-					ImGui::SeparatorText("Shadows");
-
-					static int currentShadowmapIndex = 0;
-					if (ImGui::BeginCombo("Shadow Resolution", s_shadowmap[currentShadowmapIndex].m_label))
-					{
-						for (int i = 0; i < IM_ARRAYSIZE(s_shadowmap); i++)
-						{
-							bool isSelected = (currentShadowmapIndex == i);
-							if (ImGui::Selectable(s_shadowmap[i].m_label, isSelected))
-							{
-								currentShadowmapIndex = i;
-
-								m_renderSettings.m_shadowMap.m_width = s_shadowmap[i].m_width;
-								m_renderSettings.m_shadowMap.m_height = s_shadowmap[i].m_height;
-
-								renderReset();
-							}
-							if (isSelected)
-							{
-								ImGui::SetItemDefaultFocus();
-							}
-						}
-						ImGui::EndCombo();
-					}
-
-					ImGui::SeparatorText("Debug");
-
-					ImGui::Checkbox("Debug Probes", &m_renderSettings.m_debugProbes);
-
-					static int currentDebugbufferIndex = 0;
-					if (ImGui::BeginCombo("Debug Buffer", s_debugbuffers[currentDebugbufferIndex].m_label))
-					{
-						for (int i = 0; i < IM_ARRAYSIZE(s_debugbuffers); i++)
-						{
-							bool isSelected = (currentDebugbufferIndex == i);
-							if (ImGui::Selectable(s_debugbuffers[i].m_label, isSelected))
-							{
-								currentDebugbufferIndex = i;
-
-								m_renderSettings.m_debugbuffer = s_debugbuffers[i].m_enum;
-							}
-							if (isSelected)
-							{
-								ImGui::SetItemDefaultFocus();
-							}
-						}
-						ImGui::EndCombo();
-					}
 				}
 
-				if (ImGui::CollapsingHeader("Camera Settings", ImGuiTreeNodeFlags_DefaultOpen))
+				if (ImGui::CollapsingHeader("Render"))
 				{
-					ImGui::SeparatorText("View");
 
-					ImGui::SliderFloat("Near", &m_cameraSettings.m_near, 0.0f, 1.0f);
-					ImGui::SliderFloat("Far", &m_cameraSettings.m_far, 1.0f, 10000.0f);
-
-					ImGui::SeparatorText("Controller");
-
-					ImGui::SliderFloat("Sensitivity", &m_cameraSettings.m_lookSpeed, 0.1f, 200.0f);
-					ImGui::SliderFloat("Speed", &m_cameraSettings.m_moveSpeed, 0.1f, 50.0f);
 				}
 
-				if (ImGui::CollapsingHeader("Camera Settings", ImGuiTreeNodeFlags_DefaultOpen))
-				{
-					ImGui::SliderFloat("Speed", &m_skySettings.m_speed, 0.0f, 1.0f);
-
-					const char* months[] =
-					{
-						"January",
-						"February",
-						"March",
-						"April",
-						"May",
-						"June",
-						"July",
-						"August",
-						"September",
-						"October",
-						"November",
-						"December"
-					};
-					ImGui::Combo("Month", (int*)&m_skySettings.m_month, months, BX_COUNTOF(months));
-				}
-
-				if (ImGui::CollapsingHeader("Scene", ImGuiTreeNodeFlags_DefaultOpen))
-				{
-					ImGui::SeparatorText("Entities");
-					for (auto it = m_entities.m_entities.begin(); it != m_entities.m_entities.end(); ++it)
-					{
-						max::EntityHandle entity = it->second.m_handle;
-						if (!isValid(it->second.m_handle))
-						{
-							break;
-						}
-
-						ImGui::Selectable(it->first.c_str());
-					}
-
-					ImGui::SeparatorText("World");
-					for (auto it = m_world.m_entities.begin(); it != m_world.m_entities.end(); ++it)
-					{
-						max::EntityHandle entity = it->second.m_handle;
-						if (!isValid(it->second.m_handle))
-						{
-							break;
-						}
-
-						ImGui::Selectable(it->first.c_str());
-					}
-				}
-
-				if (ImGui::CollapsingHeader("Other", ImGuiTreeNodeFlags_DefaultOpen))
-				{
 #ifdef TG_CONFIG_WITH_MAYA
-					static bool s_connectToMaya;
-					if (ImGui::Checkbox("Edit in Autodesk Maya", &s_connectToMaya))
+				static bool s_connectToMaya;
+				if (ImGui::Checkbox("Connect to Autodesk Maya", &s_connectToMaya))
+				{
+					if (s_connectToMaya && m_mayaBridge == NULL)
 					{
-						if (s_connectToMaya && m_mayaBridge == NULL)
-						{
-							// Unload current world and begin syncing with Maya.
-							m_world.unload();
+						// Unload current world and begin syncing with Maya.
+						m_world.unload();
 
-							m_mayaBridge = BX_NEW(max::getAllocator(), MayaBridge);
-							BX_ASSERT(m_mayaBridge->begin(), "Failed to begin maya bridge, not enough memory.")
-						}
-						else if (m_mayaBridge != NULL)
-						{
-							// Save current world and end syncing with Maya. 
-							m_world.serialize();
-
-							BX_ASSERT(m_mayaBridge->end(), "Failed to end maya bridge.")
-								bx::deleteObject(max::getAllocator(), m_mayaBridge);
-							m_mayaBridge = NULL;
-
-							m_world.unload();
-
-							// Load serialized scene from disk.
-							m_world.deserialize();
-						}
+						m_mayaBridge = BX_NEW(max::getAllocator(), MayaBridge);
+						BX_ASSERT(m_mayaBridge->begin(), "Failed to begin maya bridge, not enough memory.")
 					}
-#endif // TG_CONFIG_WITH_MAYA
+					else if (m_mayaBridge != NULL)
+					{
+						// Save current world and end syncing with Maya. 
+						m_world.serialize();
+
+						BX_ASSERT(m_mayaBridge->end(), "Failed to end maya bridge.")
+							bx::deleteObject(max::getAllocator(), m_mayaBridge);
+						m_mayaBridge = NULL;
+
+						m_world.unload();
+
+						// Load serialized scene from disk.
+						m_world.deserialize();
+					}
 				}
+#endif // TG_CONFIG_WITH_MAYA
 			}
 			ImGui::End();
 
@@ -509,7 +318,6 @@ struct TwilightGuardian : public max::AppI
 			m_entities.update();  
 
 			// Update systems.
-			skyUpdate();
 			cameraUpdate();
 			renderUpdate();
 			inputUpdate();
@@ -523,7 +331,6 @@ struct TwilightGuardian : public max::AppI
 	Engine   m_engine;
 	Callback m_callback;
 
-	SkySettings    m_skySettings;
 	CameraSettings m_cameraSettings;
 	RenderSettings m_renderSettings;
 	InputSettings  m_inputSettings;

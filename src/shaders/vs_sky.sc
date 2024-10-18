@@ -16,7 +16,11 @@ vec3 Perez(vec3 A,vec3 B,vec3 C,vec3 D, vec3 E,float costeta, float cosgamma)
 
 void main()
 {
-	v_texcoord0 = a_position.xy;
+	vec2 tex = a_position.xy;
+#if !MAX_SHADER_LANGUAGE_GLSL
+	tex.y = -tex.y;
+#endif // !MAX_SHADER_LANGUAGE_GLSL
+	v_texcoord0 = tex;
 
 	vec4 rayStart = mul(u_invViewProj, vec4(vec3(a_position.xy, -1.0), 1.0));
 	vec4 rayEnd = mul(u_invViewProj, vec4(vec3(a_position.xy, 1.0), 1.0));
